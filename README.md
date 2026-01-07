@@ -6,6 +6,8 @@ It explores how AI-driven characters can participate in structured narrative “
 
 The project focuses on **clean backend architecture**, **stateful interactions**, and **extensibility**, rather than UI.
 
+Personal experimental project exploring narrative simulation and system-driven storytelling. Work in progress.
+
 ---
 
 ## Key Concepts
