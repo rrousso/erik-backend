@@ -4,8 +4,11 @@ import com.github.rrousso.erik_core.conversation.ConversationHistory;
 import com.github.rrousso.erik_core.conversation.SynopsisGeneratorService;
 import com.github.rrousso.erik_core.llm.LLMClientService;
 import com.github.rrousso.erik_core.prompt.SystemPromptBuilderService;
+import com.github.rrousso.erik_core.stanza.CompletedStanza;
 import com.github.rrousso.erik_core.stanza.StanzaExtractorService;
 import com.github.rrousso.erik_core.stanza.StanzaSetup;
+import com.github.rrousso.erik_core.stanza.StanzaStatus;
+
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -22,10 +25,13 @@ public class ConsoleRunner {
         STANZA
     }
     
+    
     static class ErikState {
         Mode mode = Mode.VOID;
         ConversationHistory history;
         StanzaSetup currentStanza = null;
+        StanzaStatus stanzaStatus = StanzaStatus.NONE; 
+        
         
         ErikState(ConversationHistory history) {
             this.history = history;
@@ -60,6 +66,8 @@ public class ConsoleRunner {
         System.out.println("  'start stanza' - begin a narrative scene");
         System.out.println("  '*pause* [message]' - pause stanza and talk to Erik");
         System.out.println("  'continue' - resume the stanza");
+        System.out.println("  'abandon stanza' - abandon the stanza and start another");
+        System.out.println("  'end stanza' - finish the stanza and discuss it with Erik");
         System.out.println("  'exit' - close the app\n");
         
         // Erik's greeting
@@ -126,6 +134,11 @@ public class ConsoleRunner {
             return;
         }
         
+        if (userInput.equalsIgnoreCase("end stanza")) {
+                endStanza(state, userInput);
+                return;
+        }
+        
         if (state.mode == Mode.VOID) {
             handleVoid(userInput, state);
         } else {
@@ -148,8 +161,7 @@ public class ConsoleRunner {
     String callErik(ErikState state, String userInput) throws Exception {
         state.history.addUserMessage(userInput);
         
-        boolean stanzaPaused = (state.currentStanza != null && state.mode == Mode.VOID);
-        String systemPrompt = promptBuilder.buildVoidPrompt(stanzaPaused);
+        String systemPrompt = promptBuilder.buildVoidPrompt(state.stanzaStatus);
         
         List<ConversationHistory.Message> messages = 
             state.history.getMessagesForAPI(false);
@@ -237,16 +249,57 @@ public class ConsoleRunner {
         state.mode = Mode.VOID;
         state.history.returnToVoid();
         
-        if (!pauseMessage.isEmpty()) {
-            try {
-                String response = callErik(state, pauseMessage);
-                System.out.println("\n[Erik] " + response + "\n");
-            } catch (Exception e) {
-                handleError(e);
+        try {
+            if (pauseMessage.isEmpty()) {
+                pauseMessage = "I'd like to pause the stanza.";
             }
-        } else {
-            System.out.println("[Erik] Oh! Paused. Did you want to adjust something? I'm all ears.\n");
+            
+            String response = callErik(state, pauseMessage);
+            System.out.println("\n[Erik] " + response + "\n");
+        } catch (Exception e) {
+            handleError(e);
+            state.mode = Mode.STANZA;
+            state.stanzaStatus = StanzaStatus.ACTIVE;  // Revert status
         }
+    }
+    
+    void endStanza(ErikState state, String userInput) {
+        System.out.println("\n[System] End stanza, returning to Void...\n");
+        
+        state.mode = Mode.VOID;
+        state.history.returnToVoid();
+        
+        String quickSynopsis = "";
+        try {
+        	quickSynopsis  = synopsisGenerator.generateQuickSynopsis(state.history);
+        } catch (Exception e) {
+            handleError(e);
+            System.out.println("[System] Failed to stop stanza,.\n");
+            state.mode = Mode.STANZA;
+        }
+        
+        String detailedSypnosis = "";
+        try {
+        	detailedSypnosis = synopsisGenerator.generateDetailedSynopsis(state.history);
+        } catch (Exception e) {
+            handleError(e);
+            System.out.println("[System] Failed to stop stanza,.\n");
+            state.mode = Mode.STANZA;
+        }
+        
+        CompletedStanza completed = new CompletedStanza(quickSynopsis, detailedSypnosis, state.currentStanza);
+        
+        try {
+        	state.stanzaStatus = StanzaStatus.COMPLETED;
+            String response = callErik(state, "I'd like to end this stanza now.");
+            System.out.println("\n[System] Here's the quick resume generated\n" + completed.getQuickSynopsis() + "\n");
+            System.out.println("\n[Erik] " + response + "\n");
+        } catch (Exception e) {
+            handleError(e);
+            System.out.println("[System] Failed to stop stanza,.\n");
+            state.mode = Mode.STANZA;
+        }
+
     }
     
     void continueStanza(ErikState state) {
@@ -261,6 +314,7 @@ public class ConsoleRunner {
         } catch (Exception e) {
             handleError(e);
             System.out.println("[System] Failed to continue stanza.\n");
+            state.mode = Mode.VOID;
         }
     }
 

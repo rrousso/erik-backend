@@ -1,6 +1,8 @@
 package com.github.rrousso.erik_core.conversation;
 
 import com.github.rrousso.erik_core.llm.LLMClientService;
+import com.github.rrousso.erik_core.prompt.SystemPromptBuilderService;
+
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -12,9 +14,11 @@ import java.util.List;
 public class SynopsisGeneratorService {
     
     private final LLMClientService llmClient;
+    private final SystemPromptBuilderService promptBuilder;
     
-    public SynopsisGeneratorService(LLMClientService llmClient) {
+    public SynopsisGeneratorService(LLMClientService llmClient, SystemPromptBuilderService promptBuilder) {
         this.llmClient = llmClient;
+        this.promptBuilder = promptBuilder;
     }
     
     /**
@@ -28,24 +32,8 @@ public class SynopsisGeneratorService {
             return history.getSynopsis(isStanzaMode);
         }
         
-        List<ConversationHistory.Message> exchanges = 
-            history.getExchangesForSynopsis(isStanzaMode);
+        String exchangeText = generateExchange(history, isStanzaMode);
         
-        if (exchanges.isEmpty()) {
-            return history.getSynopsis(isStanzaMode);
-        }
-        
-        // Build exchange text
-        StringBuilder exchangeText = new StringBuilder();
-        for (ConversationHistory.Message msg : exchanges) {
-            exchangeText.append(msg.getRole().toUpperCase())
-                       .append(": ")
-                       .append(msg.getContent())
-                       .append("\n\n");
-        }
-        
-        System.out.println("[DEBUG] Exchange text to condense:");
-        System.out.println(exchangeText.toString());
         
         String previousSynopsis = history.getSynopsis(isStanzaMode);
         if (previousSynopsis.isEmpty()) {
@@ -57,7 +45,7 @@ public class SynopsisGeneratorService {
         String synopsisPrompt = "Condense the following conversation into a brief synopsis. " +
             "Extract key events, decisions, and important details. " +
             "Previous synopsis: " + previousSynopsis + "\n\n" +
-            "Recent exchanges:\n" + exchangeText.toString() + "\n\n" +
+            "Recent exchanges:\n" + exchangeText + "\n\n" +
             "Create an updated synopsis:";
 
         String newSynopsis = llmClient.callNarrator(
@@ -68,5 +56,45 @@ public class SynopsisGeneratorService {
         history.updateSynopsis(newSynopsis, isStanzaMode);
         
         return newSynopsis;
+    }
+
+	private String generateExchange(ConversationHistory history, boolean isStanzaMode) {
+		List<ConversationHistory.Message> exchanges = 
+            history.getExchangesForSynopsis(isStanzaMode);
+        
+        if (exchanges.isEmpty()) {
+            return history.getSynopsis(isStanzaMode);
+        }
+        
+        StringBuilder exchangeText = new StringBuilder();
+        for (ConversationHistory.Message msg : exchanges) {
+            exchangeText.append(msg.getRole().toUpperCase())
+                       .append(": ")
+                       .append(msg.getContent())
+                       .append("\n\n");
+        }
+		return exchangeText.toString();
+	}
+    
+    public String generateQuickSynopsis(ConversationHistory history) throws Exception {
+        // Build conversation text from ConversationHistory
+    	
+    	List<ConversationHistory.Message> messages = 
+    	            history.getMessagesForAPI(true);
+    	String systemPrompt = promptBuilder.buildQuickSynopsisPrompt();
+        String userPrompt = "Based on the previous conversations, create the quick narrative summary.";
+        
+        return llmClient.callWithHistory(systemPrompt, userPrompt, messages);
+     }
+
+    public String generateDetailedSynopsis(ConversationHistory history) throws Exception {
+        // Build conversation text from ConversationHistory  
+    	    	
+    	List<ConversationHistory.Message> messages = 
+	            history.getMessagesForAPI(true);
+        String systemPrompt = promptBuilder.buildDetailedSynopsisPrompt();
+        String userPrompt = "Based on the previous conversations, create the detailed setup document.";
+        
+        return llmClient.callWithHistory(systemPrompt, userPrompt, messages);
     }
 }
