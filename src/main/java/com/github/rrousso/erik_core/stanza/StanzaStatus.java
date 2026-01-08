@@ -31,8 +31,13 @@ public enum StanzaStatus {
      * The stanza has concluded.
      * Reflection is allowed, but no further progression.
      */
-    COMPLETED("Completed", "Stanza has concluded, can't be restarted");  
-    
+    COMPLETED("Completed", "Stanza has concluded, can't be restarted"),  
+	 /**
+     * The stanza was abandoned.
+     * Reflection can happen, a new stanza can be started .
+     */
+	ABANDONED("Abandoned", "Stanza was dropped by the User, cant be restarted");  
+	
     private final String label;
     private final String description;
     

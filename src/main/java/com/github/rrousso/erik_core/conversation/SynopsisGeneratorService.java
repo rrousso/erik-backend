@@ -25,17 +25,16 @@ public class SynopsisGeneratorService {
      * Generate synopsis for current conversation segment
      */
     public String generateSynopsis(
-            ConversationHistory history, 
-            boolean isStanzaMode) throws Exception {
+            ConversationHistory history) throws Exception {
         
-        if (!history.shouldGenerateSynopsis(isStanzaMode)) {
-            return history.getSynopsis(isStanzaMode);
+        if (!history.shouldGenerateSynopsis()) {
+            return history.getSynopsis();
         }
         
-        String exchangeText = generateExchange(history, isStanzaMode);
+        String exchangeText = generateExchange(history);
         
         
-        String previousSynopsis = history.getSynopsis(isStanzaMode);
+        String previousSynopsis = history.getSynopsis();
         if (previousSynopsis.isEmpty()) {
             previousSynopsis = "[No previous synopsis]";
         }
@@ -53,17 +52,39 @@ public class SynopsisGeneratorService {
             synopsisPrompt
         );
         
-        history.updateSynopsis(newSynopsis, isStanzaMode);
+        history.updateSynopsis(newSynopsis);
         
         return newSynopsis;
     }
+    
+    public String generatePauseChanges(
+            ConversationHistory history) throws Exception {
 
-	private String generateExchange(ConversationHistory history, boolean isStanzaMode) {
+        List<ConversationHistory.Message> voidMessages = history.getMessagesForAPI();
+        
+        // Build conversation text
+        StringBuilder conversationText = new StringBuilder();
+        for (ConversationHistory.Message msg : voidMessages) {
+            conversationText.append(msg.getRole().toUpperCase())
+                           .append(": ")
+                           .append(msg.getContent())
+                           .append("\n\n");
+        }
+        
+        String systemPrompt = promptBuilder.buildChangeDistillerPrompt();
+        
+        String userPrompt = "Analyze this conversation and extract changes:\n\n" + 
+                           conversationText.toString();
+        
+        return llmClient.callNarrator(systemPrompt, userPrompt);
+    }
+
+	private String generateExchange(ConversationHistory history) {
 		List<ConversationHistory.Message> exchanges = 
-            history.getExchangesForSynopsis(isStanzaMode);
+            history.getExchangesForSynopsis();
         
         if (exchanges.isEmpty()) {
-            return history.getSynopsis(isStanzaMode);
+            return history.getSynopsis();
         }
         
         StringBuilder exchangeText = new StringBuilder();
@@ -80,7 +101,7 @@ public class SynopsisGeneratorService {
         // Build conversation text from ConversationHistory
     	
     	List<ConversationHistory.Message> messages = 
-    	            history.getMessagesForAPI(true);
+    	            history.getMessagesForAPI();
     	String systemPrompt = promptBuilder.buildQuickSynopsisPrompt();
         String userPrompt = "Based on the previous conversations, create the quick narrative summary.";
         
@@ -91,7 +112,7 @@ public class SynopsisGeneratorService {
         // Build conversation text from ConversationHistory  
     	    	
     	List<ConversationHistory.Message> messages = 
-	            history.getMessagesForAPI(true);
+	            history.getMessagesForAPI();
         String systemPrompt = promptBuilder.buildDetailedSynopsisPrompt();
         String userPrompt = "Based on the previous conversations, create the detailed setup document.";
         

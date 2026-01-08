@@ -39,13 +39,9 @@ public class ConversationHistory {
     // Current mode's history (what actually gets sent to API)
     private List<Message> currentModeHistory = new ArrayList<>();
     
-    // Rolling synopsis for stanza mode
-    private String stanzaSynopsis = "";
-    private int stanzaExchangesSinceLastSynopsis = 0;
-    
-    // Rolling synopsis for void mode
-    private String voidSynopsis = "";
-    private int voidExchangesSinceLastSynopsis = 0;
+    // Rolling synopsis 
+    private String synopsis = "";
+    private int exchangesSinceLastSynopsis = 0;
     
     // Track current mode for synopsis management
     private boolean inStanzaMode = false;
@@ -73,17 +69,13 @@ public class ConversationHistory {
         fullHistory.add(msg);
         currentModeHistory.add(msg);
         
-        if (inStanzaMode) {
-            stanzaExchangesSinceLastSynopsis++;
-        } else {
-            voidExchangesSinceLastSynopsis++;
-        }
+        exchangesSinceLastSynopsis++;
+
     }
     
-    public List<Message> getMessagesForAPI(boolean isStanzaMode) {
+    public List<Message> getMessagesForAPI() {
         List<Message> messages = new ArrayList<>();
         
-        String synopsis = isStanzaMode ? stanzaSynopsis : voidSynopsis;
         if (!synopsis.isEmpty()) {
             messages.add(new Message("system", "PREVIOUS CONTEXT:\n" + synopsis));
         }
@@ -93,32 +85,22 @@ public class ConversationHistory {
         return messages;
     }
     
-    public boolean shouldGenerateSynopsis(boolean isStanzaMode) {
+    public boolean shouldGenerateSynopsis() {
         int threshold = getSynopsisThreshold();
-        if (isStanzaMode) {
-            return stanzaExchangesSinceLastSynopsis >= threshold;
-        } else {
-            return voidExchangesSinceLastSynopsis >= threshold;
-        }
+        return exchangesSinceLastSynopsis >= threshold;
     }
     
-    public List<Message> getExchangesForSynopsis(boolean isStanzaMode) {
+    public List<Message> getExchangesForSynopsis() {
         int windowSize = getWindowSize();
         int historySize = currentModeHistory.size();
         int endIdx = Math.max(0, historySize - (windowSize * 2));
         return new ArrayList<>(currentModeHistory.subList(0, endIdx));
     }
     
-    public void updateSynopsis(String newSynopsis, boolean isStanzaMode) {
-        if (isStanzaMode) {
-            stanzaSynopsis = newSynopsis;
-            stanzaExchangesSinceLastSynopsis = 0;
-            trimCondensedMessages();
-        } else {
-            voidSynopsis = newSynopsis;
-            voidExchangesSinceLastSynopsis = 0;
-            trimCondensedMessages();
-        }
+    public void updateSynopsis(String newSynopsis) {
+    	synopsis = newSynopsis;
+        exchangesSinceLastSynopsis = 0;
+        trimCondensedMessages();
     }
     
     private void trimCondensedMessages() {
@@ -128,8 +110,8 @@ public class ConversationHistory {
         currentModeHistory = new ArrayList<>(currentModeHistory.subList(startIdx, historySize));
     }
     
-    public String getSynopsis(boolean isStanzaMode) {
-        return isStanzaMode ? stanzaSynopsis : voidSynopsis;
+    public String getSynopsis() {
+        return synopsis;
     }
     
     private List<Message> getRecentMessages(int count) {
@@ -143,15 +125,12 @@ public class ConversationHistory {
     public void enterStanzaMode() {
         currentModeHistory.clear();
         inStanzaMode = true;
-        stanzaSynopsis = "";
-        stanzaExchangesSinceLastSynopsis = 0;
+        synopsis = "";
+        exchangesSinceLastSynopsis = 0;
     }
     
-    public void returnToVoid() {
-        inStanzaMode = false;
-    }
     
-    public List<Message> getVoidConversationForExtraction() {
+    public List<Message> getConversationForExtraction() {
         return new ArrayList<>(currentModeHistory);
     }
     
@@ -159,21 +138,22 @@ public class ConversationHistory {
         System.out.println("[DEBUG] Full history size: " + fullHistory.size());
         System.out.println("[DEBUG] Current mode history size: " + currentModeHistory.size());
         System.out.println("[DEBUG] In stanza mode: " + inStanzaMode);
-        if (inStanzaMode) {
-            System.out.println("[DEBUG] Stanza synopsis length: " + stanzaSynopsis.length());
-            System.out.println("[DEBUG] Exchanges since last synopsis: " + stanzaExchangesSinceLastSynopsis);
-        } else {
-            System.out.println("[DEBUG] Void synopsis length: " + voidSynopsis.length());
-            System.out.println("[DEBUG] Exchanges since last synopsis: " + voidExchangesSinceLastSynopsis);
-        }
+        System.out.println("[DEBUG] Stanza synopsis length: " + synopsis.length());
+        System.out.println("[DEBUG] Exchanges since last synopsis: " + exchangesSinceLastSynopsis);
     }
     
     public void clear() {
         fullHistory.clear();
         currentModeHistory.clear();
-        stanzaSynopsis = "";
-        voidSynopsis = "";
-        stanzaExchangesSinceLastSynopsis = 0;
-        voidExchangesSinceLastSynopsis = 0;
+        synopsis = "";
+        exchangesSinceLastSynopsis = 0;
     }
+
+	public void clearHistory() {
+		currentModeHistory.clear();
+	    synopsis = "";
+	    exchangesSinceLastSynopsis = 0;
+	    System.out.println("[ConversationHistory] History cleared");
+		
+	}
 }

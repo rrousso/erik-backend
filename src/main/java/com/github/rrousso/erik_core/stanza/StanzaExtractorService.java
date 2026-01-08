@@ -32,7 +32,7 @@ public class StanzaExtractorService {
     public StanzaSetup extract(ConversationHistory history) throws Exception {
         System.out.println("\n[Extractor] Asking Erik to structure the stanza...");
         
-        List<ConversationHistory.Message> voidConvo = history.getVoidConversationForExtraction();
+        List<ConversationHistory.Message> voidConvo = history.getConversationForExtraction();
         
         String conversationContext = buildConversationContext(voidConvo);
         
