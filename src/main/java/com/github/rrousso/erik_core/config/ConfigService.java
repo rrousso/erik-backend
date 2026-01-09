@@ -8,6 +8,7 @@ import java.nio.file.*;
 
 /**
  * Spring-managed configuration and user settings service
+ * Now with support for dual model configuration
  */
 @Service
 public class ConfigService {
@@ -101,26 +102,19 @@ public class ConfigService {
         return userPersona != null ? userPersona : "USER IDENTITY:\n- No persona configured\n";
     }
     
-    /**
-     * Get model name
-     */
-    public String getModel() {
-        return properties.getModel();
+    // ========== NARRATIVE MODEL CONFIG ==========
+    
+    public ErikProperties.NarrativeConfig getNarrative() {
+        return properties.getNarrative();
     }
     
-    /**
-     * Get temperature
-     */
-    public double getTemperature() {
-        return properties.getTemperature();
+    // ========== ANALYTICAL MODEL CONFIG ==========
+    
+    public ErikProperties.AnalyticalConfig getAnalytical() {
+        return properties.getAnalytical();
     }
     
-    /**
-     * Get max tokens
-     */
-    public int getMaxTokens() {
-        return properties.getMaxTokens();
-    }
+    // ========== SHARED CONFIG ==========
     
     /**
      * Get API key
@@ -142,6 +136,8 @@ public class ConfigService {
     public int getThresholdSize() {
         return properties.getRoundThresholdSize();
     }
+    
+    // ========== PERSONA MANAGEMENT ==========
     
     /**
      * Check if persona exists

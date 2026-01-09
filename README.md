@@ -1,12 +1,57 @@
 # Erik — Narrative Simulation Engine (Java / Spring Boot)
 
 ## Overview
-**Erik** is an experimental narrative simulation engine built in Java.
-It explores how AI-driven characters can participate in structured narrative “stanzas”, combining system rules, player input, and character-aware responses.
 
-The project focuses on **clean backend architecture**, **stateful interactions**, and **extensibility**, rather than UI.
+**Erik** is not a story generator.
 
-Personal experimental project exploring narrative simulation and system-driven storytelling. Work in progress.
+It is a **narrative simulation**: a space you enter, where an AI narrator embodies a living scene that responds to what you do, not to what you ask for.
+
+During a session (called a *stanza*), the system creates a consistent fictional world with rules, memory, and emotional continuity.  
+The narrator does not prompt you with “what happens next?” — the world waits for you to act inside it.
+
+This makes Erik closer to a **theatrical space** or **roleplay engine** than to a traditional interactive fiction tool.
+
+---
+
+## How to Experience Erik
+
+Erik is not used like a chatbot.
+
+Once a stanza begins, you are inside a living narrative scene.  
+The narrator will describe what exists and what happens — but it will not ask you what to do next.
+
+You interact by **acting inside the world**:
+- speak to characters
+- move
+- make decisions
+- introduce intentions
+
+The world advances in response to what you do, not to prompts like “continue the story”.
+
+---
+
+## Example Interaction
+
+[Erik]
+"Oh, hello! Would you like to work on shaping a story together?"
+
+> "I'm walking along the beach shore and see something shining in the distance."
+
+[Narration]
+The morning air carries that familiar salt-spray bite you've come to associate with your beach walks...
+A glint of light appears and vanishes with each surge of water, like a signal trying to catch your attention.
+
+> "I walk toward the glinting object."
+
+[Narration]
+Your shoes leave familiar impressions in the damp sand as you approach...
+An angular metallic object lies half-buried, etched with strange symbols.
+
+> "I reach for it."
+
+[Narration]
+As your fingers close around it, an unsettling cold seeps into your skin...
+The waves go strangely quiet, as if the ocean itself is holding its breath.
 
 ---
 
@@ -93,11 +138,23 @@ The application runs in console mode and guides you through starting and interac
 
 ## Why This Project Exists
 
-Erik is both:
-- a technical playground for backend architecture
-- a creative experiment in narrative systems
+Erik exists to explore a different model of human–AI storytelling:
 
-It is designed to be understandable, extendable, and easy to reason about.
+Instead of treating the AI as a writer that outputs plot,  
+Erik treats the AI as a **world that reacts**.
+
+The user is not directing a story.
+They are **present inside a scene**.
+
+From a technical perspective, this project is also a serious backend experiment in:
+- stateful session design
+- lifecycle management
+- memory reduction via synopsis
+- strict role separation between system, narrator, and user
+
+It is designed as both:
+- a creative narrative system
+- and a clean, extensible Spring Boot architecture.
 
 ---
 

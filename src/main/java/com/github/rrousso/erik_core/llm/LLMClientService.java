@@ -12,7 +12,8 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Spring-managed LLM client service
+ * Spring-managed LLM client service with support for multiple model types.
+ * Routes calls to appropriate models based on task type.
  */
 @Service
 public class LLMClientService {
@@ -26,9 +27,18 @@ public class LLMClientService {
     }
 
     /**
-     * Simple system + user prompt call
+     * Simple system + user prompt call (legacy method - defaults to NARRATIVE)
      */
     public String callNarrator(String systemPrompt, String userPrompt) throws Exception {
+        return call(ModelType.NARRATIVE, systemPrompt, userPrompt);
+    }
+    
+    /**
+     * Simple system + user prompt call with model type selection
+     */
+    public String call(ModelType modelType, String systemPrompt, String userPrompt) throws Exception {
+        ModelConfig config = getModelConfig(modelType);
+        
         String body = String.format(Locale.US, """
         {
           "model": "%s",
@@ -40,23 +50,36 @@ public class LLMClientService {
           "max_tokens": %d
         }
         """,
-            configService.getModel(),
+            config.model,
             jsonEscape(systemPrompt),
             jsonEscape(userPrompt),
-            configService.getTemperature(),
-            configService.getMaxTokens()
+            config.temperature,
+            config.maxTokens
         );
         
         return sendRequest(body);
     }
     
     /**
-     * Call with full conversation history
+     * Call with full conversation history (defaults to NARRATIVE)
      */
     public String callWithHistory(
             String systemPrompt, 
             String userPrompt,
             List<ConversationHistory.Message> history) throws Exception {
+        return callWithHistory(ModelType.NARRATIVE, systemPrompt, userPrompt, history);
+    }
+    
+    /**
+     * Call with full conversation history and model type selection
+     */
+    public String callWithHistory(
+            ModelType modelType,
+            String systemPrompt, 
+            String userPrompt,
+            List<ConversationHistory.Message> history) throws Exception {
+        
+        ModelConfig config = getModelConfig(modelType);
         
         StringBuilder messagesJson = new StringBuilder();
         messagesJson.append("[");
@@ -89,13 +112,31 @@ public class LLMClientService {
         messagesJson.append("]");
         
         String body = "{\n" +
-            "  \"model\": \"" + configService.getModel() + "\",\n" +
+            "  \"model\": \"" + config.model + "\",\n" +
             "  \"messages\": " + messagesJson.toString() + ",\n" +
-            "  \"temperature\": " + configService.getTemperature() + ",\n" +
-            "  \"max_tokens\": " + configService.getMaxTokens() + "\n" +
+            "  \"temperature\": " + config.temperature + ",\n" +
+            "  \"max_tokens\": " + config.maxTokens + "\n" +
             "}";
         
         return sendRequest(body);
+    }
+    
+    /**
+     * Get model configuration based on type
+     */
+    private ModelConfig getModelConfig(ModelType modelType) {
+        return switch (modelType) {
+            case NARRATIVE -> new ModelConfig(
+                configService.getNarrative().getModel(),
+                configService.getNarrative().getTemperature(),
+                configService.getNarrative().getMaxTokens()
+            );
+            case ANALYTICAL -> new ModelConfig(
+                configService.getAnalytical().getModel(),
+                configService.getAnalytical().getTemperature(),
+                configService.getAnalytical().getMaxTokens()
+            );
+        };
     }
     
     /**
@@ -182,7 +223,22 @@ public class LLMClientService {
         return content.toString();
     }
     
-    public String getCurrentModel() {
-        return configService.getModel();
+    /**
+     * Get current narrative model name
+     */
+    public String getNarrativeModel() {
+        return configService.getNarrative().getModel();
     }
+    
+    /**
+     * Get current analytical model name
+     */
+    public String getAnalyticalModel() {
+        return configService.getAnalytical().getModel();
+    }
+    
+    /**
+     * Internal class to hold model configuration
+     */
+    private record ModelConfig(String model, double temperature, int maxTokens) {}
 }

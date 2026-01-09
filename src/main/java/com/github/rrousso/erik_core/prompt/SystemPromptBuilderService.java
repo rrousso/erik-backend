@@ -29,6 +29,7 @@ public class SystemPromptBuilderService {
     private String detailedSynopsisExtractionPrompt;
     private String quickSynopsisExtractionPrompt;
     private String changeDistillerPrompt;
+    private String flagDetectionPrompt;
     
     public SystemPromptBuilderService(PromptLoaderService promptLoader, ConfigService configService) {
         this.promptLoader = promptLoader;
@@ -48,7 +49,13 @@ public class SystemPromptBuilderService {
         detailedSynopsisExtractionPrompt = promptLoader.load("narrator/detailed_synopsis.txt");
         quickSynopsisExtractionPrompt = promptLoader.load("narrator/quick_synopsis.txt");
         changeDistillerPrompt = promptLoader.load("narrator/changes_distiller.txt");
+        flagDetectionPrompt = promptLoader.load("narrator/flag_detection.txt"); // ADD THIS
         System.out.println("[System] Prompts loaded successfully");
+    }
+
+    // ADD THIS METHOD
+    public String buildFlagDetectionPrompt() {
+        return flagDetectionPrompt;
     }
     
     /**
@@ -65,7 +72,11 @@ public class SystemPromptBuilderService {
         prompt.append(voidModeErik);
         
         // Add status-specific context
-        if (state.getStanzaStatus() == StanzaStatus.PAUSED) {
+        if (state.getStanzaStatus() == StanzaStatus.ACTIVE) {
+            prompt.append("\n\n");
+            prompt.append("CONTEXT: The user has confirmed starting the stanza. Do not ask for confirmation. Transition naturally into final setup or closing.");
+            
+        }else if (state.getStanzaStatus() == StanzaStatus.PAUSED) {
             prompt.append("\n\n");
             prompt.append(voidPausedContext);
             
