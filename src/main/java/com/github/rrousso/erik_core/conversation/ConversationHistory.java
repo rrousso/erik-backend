@@ -62,26 +62,39 @@ public class ConversationHistory {
         Message msg = new Message("user", content);
         fullHistory.add(msg);
         currentModeHistory.add(msg);
+        System.out.println("[ConversationHistory] Added user message. CurrentMode size: " + currentModeHistory.size() +
+            ", Full history size: " + fullHistory.size());
     }
-    
+
     public void addAssistantMessage(String content) {
         Message msg = new Message("assistant", content);
         fullHistory.add(msg);
         currentModeHistory.add(msg);
-        
+
         exchangesSinceLastSynopsis++;
+        System.out.println("[ConversationHistory] Added assistant message. CurrentMode size: " + currentModeHistory.size() +
+            ", Full history size: " + fullHistory.size() +
+            ", Exchanges since last synopsis: " + exchangesSinceLastSynopsis);
 
     }
     
     public List<Message> getMessagesForAPI() {
         List<Message> messages = new ArrayList<>();
-        
+
         if (!synopsis.isEmpty()) {
+            System.out.println("[ConversationHistory] getMessagesForAPI - Including synopsis in system message (" + synopsis.length() + " chars)");
             messages.add(new Message("system", "PREVIOUS CONTEXT:\n" + synopsis));
+        } else {
+            System.out.println("[ConversationHistory] getMessagesForAPI - No synopsis available");
         }
-        
-        messages.addAll(getRecentMessages(getWindowSize()));
-        
+
+        List<Message> recentMessages = getRecentMessages(getWindowSize());
+        messages.addAll(recentMessages);
+
+        System.out.println("[ConversationHistory] getMessagesForAPI - Returning " + messages.size() +
+            " messages (synopsis: " + (!synopsis.isEmpty() ? "1" : "0") +
+            ", recent: " + recentMessages.size() + ")");
+
         return messages;
     }
     
@@ -94,19 +107,43 @@ public class ConversationHistory {
         int windowSize = getWindowSize();
         int historySize = currentModeHistory.size();
         int endIdx = Math.max(0, historySize - (windowSize * 2));
+
+        System.out.println("[ConversationHistory] getExchangesForSynopsis - Window size: " + windowSize +
+            ", History size: " + historySize +
+            ", End index: " + endIdx +
+            ", Returning: " + endIdx + " messages for synopsis");
+
         return new ArrayList<>(currentModeHistory.subList(0, endIdx));
     }
     
     public void updateSynopsis(String newSynopsis) {
-    	synopsis = newSynopsis;
+        int oldHistorySize = currentModeHistory.size();
+        String oldSynopsis = synopsis;
+
+        System.out.println("\n[ConversationHistory] ========== UPDATING SYNOPSIS ==========");
+        System.out.println("[ConversationHistory] Old synopsis length: " + oldSynopsis.length());
+        System.out.println("[ConversationHistory] New synopsis length: " + newSynopsis.length());
+        System.out.println("[ConversationHistory] History size before trim: " + oldHistorySize);
+
+        synopsis = newSynopsis;
         exchangesSinceLastSynopsis = 0;
         trimCondensedMessages();
+
+        System.out.println("[ConversationHistory] History size after trim: " + currentModeHistory.size());
+        System.out.println("[ConversationHistory] Messages trimmed: " + (oldHistorySize - currentModeHistory.size()));
+        System.out.println("[ConversationHistory] ========== SYNOPSIS UPDATE COMPLETE ==========\n");
     }
-    
+
     private void trimCondensedMessages() {
         int windowSize = getWindowSize();
         int historySize = currentModeHistory.size();
         int startIdx = Math.max(0, historySize - (windowSize * 2));
+
+        System.out.println("[ConversationHistory] trimCondensedMessages - Window size: " + windowSize +
+            ", History size: " + historySize +
+            ", Start index: " + startIdx +
+            ", Will keep: " + (historySize - startIdx) + " messages");
+
         currentModeHistory = new ArrayList<>(currentModeHistory.subList(startIdx, historySize));
     }
     
