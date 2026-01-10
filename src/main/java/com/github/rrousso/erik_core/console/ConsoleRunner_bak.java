@@ -23,7 +23,7 @@ import java.util.Scanner;
  * Uses analytical model to detect commands before calling narrative models.
  */
 @Component
-public class ConsoleRunner {
+public class ConsoleRunner_bak {
     
     private final ConversationHistory stanzaHistory;
     private final ConversationHistory voidHistory;
@@ -33,7 +33,7 @@ public class ConsoleRunner {
     private final SynopsisGeneratorService synopsisGenerator;
     private final FlagDetectorService flagDetector;
     
-    public ConsoleRunner(
+    public ConsoleRunner_bak(
             ConversationHistory conversationHistory,
             LLMClientService llmClient,
             SystemPromptBuilderService promptBuilder,

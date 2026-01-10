@@ -25,15 +25,15 @@ public class FlagDetectorService {
      * Result of flag detection including the flag and which mode should handle it
      */
     public static class FlagDetectionResult {
-        private final FlagExtractor.Flag flag;
+        private final Flag flag;
         private final RoutingMode routingMode;
         
-        public FlagDetectionResult(FlagExtractor.Flag flag, RoutingMode routingMode) {
+        public FlagDetectionResult(Flag flag, RoutingMode routingMode) {
             this.flag = flag;
             this.routingMode = routingMode;
         }
         
-        public FlagExtractor.Flag getFlag() {
+        public Flag getFlag() {
             return flag;
         }
         
@@ -42,7 +42,7 @@ public class FlagDetectorService {
         }
         
         public boolean hasFlag() {
-            return flag != FlagExtractor.Flag.NONE;
+            return flag != Flag.NONE;
         }
     }
     
@@ -58,22 +58,19 @@ public class FlagDetectorService {
     /**
      * Detect flag from user input based on current stanza status
      */
-    public FlagDetectionResult detect(String userInput, StanzaStatus currentStatus) {
+    public Flag detect(String userInput, StanzaStatus currentStatus) {
         try {
             
             String prompt = buildFlagDetectionPrompt(userInput, currentStatus);
             String response = llmClient.call(ModelType.ANALYTICAL, "", prompt);
             
-            FlagDetectionResult result = parseResponse(response.trim(), currentStatus);
+            Flag flag = parseResponse(response.trim(), currentStatus);
   
-            return result;
+            return flag;
         } catch (Exception e) {
             System.err.println("[FlagDetector] Error detecting flag: " + e.getMessage());
             // On error, assume no flag and route based on current status
-            return new FlagDetectionResult(
-                FlagExtractor.Flag.NONE,
-                currentStatus == StanzaStatus.ACTIVE ? RoutingMode.STANZA : RoutingMode.VOID
-            );
+            return Flag.NONE;
         }
     }
     
@@ -106,47 +103,25 @@ public class FlagDetectorService {
     /**
      * Parse the LLM response into a FlagDetectionResult
      */
-    private FlagDetectionResult parseResponse(String response, StanzaStatus currentStatus) {
+    private Flag parseResponse(String response, StanzaStatus currentStatus) {
         String cleanResponse = response.toUpperCase().trim();
         
         // Extract just the flag word (remove any extra text)
-        FlagExtractor.Flag flag = FlagExtractor.Flag.NONE;
+        Flag flag = Flag.NONE;
         
         if (cleanResponse.contains("START")) {
-            flag = FlagExtractor.Flag.START_STANZA;
+            flag = Flag.START_STANZA;
         } else if (cleanResponse.contains("PAUSE")) {
-            flag = FlagExtractor.Flag.PAUSE_STANZA;
+            flag = Flag.PAUSE_STANZA;
         } else if (cleanResponse.contains("CONTINUE")) {
-            flag = FlagExtractor.Flag.CONTINUE_STANZA;
+            flag = Flag.CONTINUE_STANZA;
         } else if (cleanResponse.contains("END")) {
-            flag = FlagExtractor.Flag.END_STANZA;
+            flag = Flag.END_STANZA;
         } else if (cleanResponse.contains("ABANDON")) {
-            flag = FlagExtractor.Flag.ABANDON_STANZA;
+            flag = Flag.ABANDON_STANZA;
         }
         
-        // Determine routing based on flag and current status
-        RoutingMode routing = determineRouting(flag, currentStatus);
-        
-        return new FlagDetectionResult(flag, routing);
+        return flag;
     }
-    
-    /**
-     * Determine which mode should handle the input
-     */
-    private RoutingMode determineRouting(FlagExtractor.Flag flag, StanzaStatus currentStatus) {
-        // If no flag, route based on current status
-        if (flag == FlagExtractor.Flag.NONE) {
-            return currentStatus == StanzaStatus.ACTIVE ? RoutingMode.STANZA : RoutingMode.VOID;
-        }
-        
-        // Flags that trigger system actions directly
-        return switch (flag) {
-            case START_STANZA -> RoutingMode.SYSTEM;  // System handles stanza start
-            case PAUSE_STANZA -> RoutingMode.SYSTEM;  // System handles pause
-            case CONTINUE_STANZA -> RoutingMode.SYSTEM;  // System handles continue
-            case END_STANZA -> RoutingMode.SYSTEM;  // System handles end
-            case ABANDON_STANZA -> RoutingMode.SYSTEM;  // System handles abandon
-            default -> currentStatus == StanzaStatus.ACTIVE ? RoutingMode.STANZA : RoutingMode.VOID;
-        };
-    }
+
 }

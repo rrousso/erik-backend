@@ -47,9 +47,9 @@ public class SystemPromptBuilderService {
         stanzaModeNarrator = promptLoader.load("narrator/stanza_narrator.txt");
         extractionPrompt = promptLoader.load("narrator/extraction_prompt.txt");
         detailedSynopsisExtractionPrompt = promptLoader.load("narrator/detailed_synopsis.txt");
-        quickSynopsisExtractionPrompt = promptLoader.load("narrator/quick_synopsis.txt");
-        changeDistillerPrompt = promptLoader.load("narrator/changes_distiller.txt");
-        flagDetectionPrompt = promptLoader.load("narrator/flag_detection.txt"); // ADD THIS
+        quickSynopsisExtractionPrompt = promptLoader.load("analytical/quick_synopsis.txt");
+        changeDistillerPrompt = promptLoader.load("analytical/changes_distiller.txt");
+        flagDetectionPrompt = promptLoader.load("analytical/flag_detection.txt"); // ADD THIS
         System.out.println("[System] Prompts loaded successfully");
     }
 
