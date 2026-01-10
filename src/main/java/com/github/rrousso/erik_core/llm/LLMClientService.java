@@ -38,7 +38,9 @@ public class LLMClientService {
      */
     public String call(ModelType modelType, String systemPrompt, String userPrompt) throws Exception {
         ModelConfig config = getModelConfig(modelType);
-        
+
+        System.out.println("\n[LLM] Preparing simple call to " + modelType + " model: " + config.model);
+
         String body = String.format(Locale.US, """
         {
           "model": "%s",
@@ -56,8 +58,13 @@ public class LLMClientService {
             config.temperature,
             config.maxTokens
         );
-        
-        return sendRequest(body);
+
+        System.out.println("[LLM] Request body (" + body.length() + " chars):");
+        System.out.println("--- BEGIN REQUEST BODY ---");
+        System.out.println(body);
+        System.out.println("--- END REQUEST BODY ---");
+
+        return sendRequest(body, modelType.toString());
     }
     
     /**
@@ -75,21 +82,24 @@ public class LLMClientService {
      */
     public String callWithHistory(
             ModelType modelType,
-            String systemPrompt, 
+            String systemPrompt,
             String userPrompt,
             List<ConversationHistory.Message> history) throws Exception {
-        
+
         ModelConfig config = getModelConfig(modelType);
-        
+
+        System.out.println("\n[LLM] Preparing callWithHistory to " + modelType + " model: " + config.model);
+        System.out.println("[LLM] History message count: " + history.size());
+
         StringBuilder messagesJson = new StringBuilder();
         messagesJson.append("[");
-        
+
         // Add system message
         messagesJson.append(String.format(
-            "{ \"role\": \"system\", \"content\": %s }", 
+            "{ \"role\": \"system\", \"content\": %s }",
             jsonEscape(systemPrompt)
         ));
-        
+
         // Add conversation history
         for (ConversationHistory.Message msg : history) {
             messagesJson.append(",");
@@ -99,7 +109,7 @@ public class LLMClientService {
                 jsonEscape(msg.getContent())
             ));
         }
-        
+
         // Add final user prompt if not empty
         if (!userPrompt.isEmpty()) {
             messagesJson.append(",");
@@ -108,17 +118,22 @@ public class LLMClientService {
                 jsonEscape(userPrompt)
             ));
         }
-        
+
         messagesJson.append("]");
-        
+
         String body = "{\n" +
             "  \"model\": \"" + config.model + "\",\n" +
             "  \"messages\": " + messagesJson.toString() + ",\n" +
             "  \"temperature\": " + config.temperature + ",\n" +
             "  \"max_tokens\": " + config.maxTokens + "\n" +
             "}";
-        
-        return sendRequest(body);
+
+        System.out.println("[LLM] Request body (" + body.length() + " chars):");
+        System.out.println("--- BEGIN REQUEST BODY ---");
+        System.out.println(body);
+        System.out.println("--- END REQUEST BODY ---");
+
+        return sendRequest(body, modelType.toString());
     }
     
     /**
@@ -142,12 +157,14 @@ public class LLMClientService {
     /**
      * Shared request sending logic
      */
-    private String sendRequest(String body) throws Exception {
+    private String sendRequest(String body, String modelType) throws Exception {
         String apiKey = configService.getApiKey();
         if (apiKey == null || apiKey.isEmpty()) {
             throw new RuntimeException("API key not configured. Set OPENROUTER_API_KEY environment variable or in application.yml");
         }
-        
+
+        System.out.println("[LLM] Sending request to OpenRouter API...");
+
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(API_URL))
             .header("Authorization", "Bearer " + apiKey)
@@ -158,7 +175,21 @@ public class LLMClientService {
             .build();
 
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-        return extractContent(response.body());
+
+        System.out.println("[LLM] Received response (HTTP " + response.statusCode() + ")");
+        System.out.println("[LLM] Raw response body (" + response.body().length() + " chars):");
+        System.out.println("--- BEGIN RESPONSE BODY ---");
+        System.out.println(response.body());
+        System.out.println("--- END RESPONSE BODY ---");
+
+        String extractedContent = extractContent(response.body());
+
+        System.out.println("[LLM] Extracted content (" + extractedContent.length() + " chars):");
+        System.out.println("--- BEGIN EXTRACTED CONTENT ---");
+        System.out.println(extractedContent);
+        System.out.println("--- END EXTRACTED CONTENT ---");
+
+        return extractedContent;
     }
 
     private String jsonEscape(String text) {
