@@ -4,6 +4,8 @@ import com.github.rrousso.erik_core.Entities.ConversationHistory;
 import com.github.rrousso.erik_core.Entities.ModelType;
 import com.github.rrousso.erik_core.Entities.StanzaSetup;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -14,6 +16,7 @@ import java.util.List;
 @Service
 public class StanzaExtractorService {
     
+	private static final Logger log = LoggerFactory.getLogger(StanzaExtractorService.class);
     private final LLMClientService llmClient;
     private final SystemPromptBuilderService promptBuilder;
     
@@ -26,7 +29,7 @@ public class StanzaExtractorService {
      * Extract stanza setup from conversation history
      */
     public StanzaSetup extract(ConversationHistory history) throws Exception {
-        System.out.println("\n[Extractor] Asking Erik to structure the stanza...");
+        log.info("\n[Extractor] Asking Erik to structure the stanza...");
         
         List<ConversationHistory.Message> voidConvo = history.getConversationForExtraction();
         

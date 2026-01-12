@@ -101,7 +101,7 @@ public class SessionFlowService {
                 break;
                 
             case ABANDON_STANZA:
-                abandonStanza(state);
+                abandonStanza(state, userInput);
                 break;
                 
             default:
@@ -123,7 +123,7 @@ public class SessionFlowService {
     }
     
     String callErik(SessionState state, String userInput) throws Exception {
-        state.getVoidHistory().addUserMessage(userInput);
+        
         
         String systemPrompt = promptBuilder.buildVoidPrompt(state);
         
@@ -131,10 +131,10 @@ public class SessionFlowService {
         String response = llmClient.callWithHistory(
             ModelType.NARRATIVE, 
             systemPrompt, 
-            "", 
+            "userInput", 
             state.getVoidHistory().getMessagesForAPI()
         );
-        
+        state.getVoidHistory().addUserMessage(userInput);
         state.getVoidHistory().addAssistantMessage(response);
         
         try {
@@ -166,13 +166,11 @@ public class SessionFlowService {
         StringBuilder builder = new StringBuilder();
         
         try {
-	        // Call Erik to acknowledge (before changing status)
-	        String erikResponse = callErik(state, "I'm ready to start the stanza.");
+        	
+        	state.setStanzaStatus(StanzaStatus.ACTIVE);
+	        String erikResponse = callErik(state, userInput);
 	        builder.append(erikResponse);
 	        builder.append("\n\n");
-	        
-	        // NOW change status and extract
-	    	state.setStanzaStatus(StanzaStatus.ACTIVE);
 	        
 	        log.debug("Extracting stanza details...");
         
@@ -213,7 +211,6 @@ public class SessionFlowService {
     }
     
     String callNarrator(SessionState state, String userInput) throws Exception {
-        state.getStanzaHistory().addUserMessage(userInput);
         
         String systemPrompt = promptBuilder.buildStanzaPrompt(state.getCurrentStanza());
         
@@ -221,10 +218,10 @@ public class SessionFlowService {
         String response = llmClient.callWithHistory(
             ModelType.NARRATIVE, 
             systemPrompt, 
-            "", 
+            userInput, 
             state.getStanzaHistory().getMessagesForAPI()
         );
-        
+        state.getStanzaHistory().addUserMessage(userInput);
         state.getStanzaHistory().addAssistantMessage(response);
         
         try {
@@ -308,7 +305,7 @@ public class SessionFlowService {
         }
     }
     
-    private void abandonStanza(SessionState state) {
+    private void abandonStanza(SessionState state, String userInput) {
         if (state.isInVoidMode()) {
         	message = "[System] No active stanza to abandon.\n";
             log.warn("Attempt to abandon stanza while in void mode");
@@ -325,7 +322,7 @@ public class SessionFlowService {
             CompletedStanza completed = createCompletedStanza(state);
             state.setCompletedStanza(completed);
            
-            String response = callErik(state, "I decided to abandon that stanza. It wasn't working for me.");
+            String response = callErik(state, userInput);
             builder.append("\n[STANZA ABANDONED]\n");
             builder.append("\n[Erik] ");
             builder.append(response);

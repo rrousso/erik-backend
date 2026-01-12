@@ -14,7 +14,7 @@ import java.util.List;
 @Service
 public class SynopsisGeneratorService {
     
-	private static final Logger log = LoggerFactory.getLogger(ConversationHistory.class);
+	private static final Logger log = LoggerFactory.getLogger(SynopsisGeneratorService.class);
 	
     private final LLMClientService llmClient;
     private final SystemPromptBuilderService promptBuilder;
@@ -34,14 +34,14 @@ public class SynopsisGeneratorService {
     	
         int threshold = getSynopsisThreshold();
     	
-        // FIXED: Return early if we haven't reached the threshold yet
+
         if (history.getCurrentHistorySize() < threshold) {
             return history.getSynopsis();
         }
 
         String exchangeText = generateExchange(history);
         
-        // NEW FIX: If there's nothing to condense, skip the LLM call
+
         if (exchangeText.isEmpty()) {
             log.info("[Synopsis] No old messages to condense yet. Skipping synopsis generation.");
             return history.getSynopsis();
@@ -67,7 +67,7 @@ public class SynopsisGeneratorService {
 
         // Use NARRATIVE model for rolling synopsis (needs quality)
         String newSynopsis = llmClient.call(
-            ModelType.NARRATIVE,
+            ModelType.ANALYTICAL,
             "You are a helpful assistant that creates concise summaries.",
             synopsisPrompt
         );
