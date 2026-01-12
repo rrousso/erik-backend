@@ -15,6 +15,7 @@ import java.util.Objects;
 
 /**
  * Spring service that orchestrates the flow between Erik (void mode) and Narrator (stanza mode)
+ * Uses simple call() with complete system prompts instead of callWithHistory()
  */
 @Service
 public class SessionFlowService {
@@ -113,7 +114,7 @@ public class SessionFlowService {
 
     void handleVoid(String userInput, SessionState state) {
         try {
-            message = callErik(state, userInput);
+            message = "\n[Narration] " + callErik(state, userInput);
             
         } catch (Exception e) {
             log.error("Error in void mode", e);
@@ -122,26 +123,24 @@ public class SessionFlowService {
         }
     }
     
+    /**
+     * Call Erik with complete system prompt (synopsis + recent exchanges included)
+     * Uses simple call(), not callWithHistory()
+     */
     String callErik(SessionState state, String userInput) throws Exception {
         
-        
+        // Build complete system prompt with synopsis and recent exchanges
         String systemPrompt = promptBuilder.buildVoidPrompt(state);
         
-        // Use narrative model for Erik
-        String response = llmClient.callWithHistory(
+        // Use narrative model for Erik with simple call
+        String response = llmClient.call(
             ModelType.NARRATIVE, 
             systemPrompt, 
-            "userInput", 
-            state.getVoidHistory().getMessagesForAPI()
+            userInput  // Only current user input
         );
+        
         state.getVoidHistory().addUserMessage(userInput);
         state.getVoidHistory().addAssistantMessage(response);
-        
-        try {
-            synopsisGenerator.generateSynopsis(state.getVoidHistory());
-        } catch (Exception e) {
-            log.warn("Failed to generate synopsis", e);
-        }
         
         return response;
     }
@@ -210,17 +209,22 @@ public class SessionFlowService {
         }
     }
     
+    /**
+     * Call Narrator with complete system prompt (synopsis + recent exchanges included)
+     * Uses simple call(), not callWithHistory()
+     */
     String callNarrator(SessionState state, String userInput) throws Exception {
         
-        String systemPrompt = promptBuilder.buildStanzaPrompt(state.getCurrentStanza());
+        // Build complete system prompt with synopsis and recent exchanges
+        String systemPrompt = promptBuilder.buildStanzaPrompt(state.getCurrentStanza(), state);
         
-        // Use narrative model for narrator
-        String response = llmClient.callWithHistory(
+        // Use narrative model for narrator with simple call
+        String response = llmClient.call(
             ModelType.NARRATIVE, 
             systemPrompt, 
-            userInput, 
-            state.getStanzaHistory().getMessagesForAPI()
+            userInput  // Only current user input
         );
+        
         state.getStanzaHistory().addUserMessage(userInput);
         state.getStanzaHistory().addAssistantMessage(response);
         
@@ -281,8 +285,7 @@ public class SessionFlowService {
             builder.append(completed.getQuickSynopsis());
             builder.append("\n");
             
-            // OPTIONAL: Add Erik's reflection (with better prompt)
-            // If you want Erik to respond, use a more natural prompt:
+            // OPTIONAL: Add Erik's reflection
             try {
                 String erikReflection = callErik(state, 
                     "That was a meaningful stanza to experience together.");
@@ -291,7 +294,6 @@ public class SessionFlowService {
                 builder.append("\n");
             } catch (Exception e) {
                 log.warn("Failed to get Erik's reflection on stanza end", e);
-                // Continue without Erik's comment
             }
             
             message = builder.toString();
@@ -404,7 +406,6 @@ public class SessionFlowService {
 
     void handleError(Exception e) {
         log.error("Error occurred", e);
-        // Error is already logged, just print stack trace to console for debugging
         e.printStackTrace();
     }
 }

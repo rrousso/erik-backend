@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 import jakarta.annotation.PostConstruct;
 
 /**
- * Spring service for building system prompts
+ * Spring service for building system prompts with synopsis and recent exchanges included
  */
 @Service
 public class SystemPromptBuilderService {
@@ -54,13 +54,29 @@ public class SystemPromptBuilderService {
         System.out.println("[System] Prompts loaded successfully");
     }
 
-    // ADD THIS METHOD
     public String buildFlagDetectionPrompt() {
         return flagDetectionPrompt;
     }
     
+    public String buildWorldSnapshotPrompt() {
+        return worldSnapshotSynopsis;
+    }
+    
+    public String buildQuickSynopsisPrompt() {
+        return quickSynopsisExtractionPrompt;
+    }
+    
+    public String buildDetailedSynopsisPrompt() {
+        return detailedSynopsisExtractionPrompt;
+    }
+    
+    public String buildChangeDistillerPrompt() {
+        return changeDistillerPrompt;
+    }
+    
     /**
      * Build system prompt for VOID mode
+     * Includes synopsis and recent exchanges as text in the prompt
      */
     public String buildVoidPrompt(SessionState state) {
         StringBuilder prompt = new StringBuilder();
@@ -72,16 +88,32 @@ public class SystemPromptBuilderService {
         prompt.append("\n\n");
         prompt.append(voidModeErik);
         
+        // Add synopsis if exists
+        String synopsis = state.getVoidHistory().getSynopsis();
+        if (!synopsis.isEmpty()) {
+            prompt.append("\n\n---\n\n");
+            prompt.append("PREVIOUS SNAPSHOT:\n");
+            prompt.append(synopsis);
+            prompt.append("\n\n---\n\n");
+        }
+        
+        // Add recent exchanges as text
+        String recentExchanges = state.getVoidHistory().getRecentExchangesForSystemPrompt();
+        if (!recentExchanges.isEmpty()) {
+            prompt.append("RECENT EXCHANGES:\n");
+            prompt.append(recentExchanges);
+            prompt.append("---\n\n");
+        }
+        
         // Add status-specific context
         if (state.getStanzaStatus() == StanzaStatus.ACTIVE) {
             prompt.append("\n\n");
-            // FIXED: More explicit instruction to NOT narrate
             prompt.append("CONTEXT: The user has confirmed starting the stanza. ");
             prompt.append("Simply acknowledge their readiness with a brief, enthusiastic response (1-2 sentences). ");
             prompt.append("Do NOT narrate the scene. Do NOT describe what happens next. ");
             prompt.append("The Narrator will handle the actual scene - you are still in planning mode, just wrapping up.");
             
-        }else if (state.getStanzaStatus() == StanzaStatus.PAUSED) {
+        } else if (state.getStanzaStatus() == StanzaStatus.PAUSED) {
             prompt.append("\n\n");
             prompt.append(voidPausedContext);
             
@@ -112,7 +144,7 @@ public class SystemPromptBuilderService {
                 prompt.append("\n\n---\n\n");
                 prompt.append("Use this information to discuss the stanza with the user if they want to reflect on it.");
             }
-        }else if (state.getStanzaStatus() == StanzaStatus.ABANDONED) {
+        } else if (state.getStanzaStatus() == StanzaStatus.ABANDONED) {
         	prompt.append("\n\n");
             prompt.append(voidAbandonedContext);
         	
@@ -132,8 +164,9 @@ public class SystemPromptBuilderService {
     
     /**
      * Build system prompt for STANZA mode
+     * Includes synopsis and recent exchanges as text in the prompt
      */
-    public String buildStanzaPrompt(StanzaSetup setup) {
+    public String buildStanzaPrompt(StanzaSetup setup, SessionState state) {
         StringBuilder prompt = new StringBuilder();
         
         prompt.append(fictionalFrame);
@@ -145,9 +178,25 @@ public class SystemPromptBuilderService {
         prompt.append("---\n\n");
         prompt.append(setup.toNarratorContext());
         
+        // Add synopsis if exists
+        String synopsis = state.getStanzaHistory().getSynopsis();
+        if (!synopsis.isEmpty()) {
+            prompt.append("\n\n---\n\n");
+            prompt.append("PREVIOUS SNAPSHOT:\n");
+            prompt.append(synopsis);
+            prompt.append("\n\n---\n\n");
+        }
+        
+        // Add recent exchanges as text
+        String recentExchanges = state.getStanzaHistory().getRecentExchangesForSystemPrompt();
+        if (!recentExchanges.isEmpty()) {
+            prompt.append("RECENT EXCHANGES:\n");
+            prompt.append(recentExchanges);
+            prompt.append("---\n\n");
+        }
+        
         return prompt.toString();
     }
-    
     
     /**
      * Build prompt for extraction phase
@@ -155,16 +204,4 @@ public class SystemPromptBuilderService {
     public String buildExtractionPrompt() {
         return extractionPrompt;
     }
-
-	public String buildQuickSynopsisPrompt() {
-		return quickSynopsisExtractionPrompt;
-	}
-
-	public String buildDetailedSynopsisPrompt() {
-		return detailedSynopsisExtractionPrompt;
-	}
-
-	public String buildChangeDistillerPrompt() {
-		return changeDistillerPrompt;
-	}
 }

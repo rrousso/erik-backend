@@ -8,6 +8,8 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Manages conversation history for any mode with rolling synopsis.
+ * fullHistory is kept ONLY for logging/debugging, not for synopsis generation.
+ * Synopsis generation uses: synopsis + currentHistory (the rolling window).
  */
 public class ConversationHistory {
 	  private static final Logger log = LoggerFactory.getLogger(ConversationHistory.class);
@@ -30,10 +32,10 @@ public class ConversationHistory {
         }
     }
     
-    // Full conversation history (never cleared during session)
+    // Full conversation history (ONLY for logging/debugging, never used for synopsis)
     private final List<Message> fullHistory = new ArrayList<>();
     
-    // Current mode's history (what actually gets sent to API)
+    // Current mode's history (gets trimmed for context management)
     private List<Message> currentHistory = new ArrayList<>();
     
     // Rolling synopsis 
@@ -60,24 +62,42 @@ public class ConversationHistory {
 
     }
     
-    public List<Message> getMessagesForAPI() {
-        List<Message> messages = new ArrayList<>();
-
-        if (!synopsis.isEmpty()) {
-        	log.info("[ConversationHistory] getMessagesForAPI - Including synopsis in system message (" + synopsis.length() + " chars)");
-            messages.add(new Message("system", "PREVIOUS CONTEXT:\n" + synopsis));
-        } else {
-        	log.info("[ConversationHistory] getMessagesForAPI - No synopsis available");
+    /**
+     * Get recent messages formatted as TEXT for system prompt inclusion
+     * Format: "USER: content\n\nASSISTANT: content\n\n"
+     */
+    public String getRecentExchangesForSystemPrompt() {
+        if (currentHistory.isEmpty()) {
+            return "";
         }
-
-        List<Message> recentMessages = getRecentMessages();
-        messages.addAll(recentMessages);
-
-        log.info("[ConversationHistory] getMessagesForAPI - Returning " + messages.size() +
-            " messages (synopsis: " + (!synopsis.isEmpty() ? "1" : "0") +
-            ", recent: " + recentMessages.size() + ")");
-
-        return messages;
+        
+        StringBuilder exchanges = new StringBuilder();
+        for (Message msg : currentHistory) {
+            exchanges.append(msg.getRole().toUpperCase())
+                     .append(": ")
+                     .append(msg.getContent())
+                     .append("\n\n");
+        }
+        
+        log.info("[ConversationHistory] Formatted " + currentHistory.size() + 
+                " messages as text for system prompt (" + exchanges.length() + " chars)");
+        
+        return exchanges.toString();
+    }
+    
+    /**
+     * Get synopsis (raw text, no formatting)
+     */
+    public String getSynopsis() {
+        return synopsis;
+    }
+    
+    /**
+     * Get current (trimmed) messages
+     * For synopsis generation, use this + getSynopsis() to get complete context
+     */
+    public List<Message> getAllMessages() {
+        return new ArrayList<>(currentHistory);
     }
     
     public void updateSynopsis(String newSynopsis, int window) {
@@ -92,13 +112,13 @@ public class ConversationHistory {
         trimCondensedMessages(window);
 
         log.info("[ConversationHistory] Messages trimmed: " + (oldHistorySize - currentHistory.size()));
+        log.info("[ConversationHistory] Full history size (logging only): " + fullHistory.size());
     }
 
     private void trimCondensedMessages(int windowSize) {
         int historySize = currentHistory.size();
-        int keepCount = windowSize * 2;  // Keep this many recent messages
+        int keepCount = windowSize;  // Keep this many recent messages
         
-        // FIXED: If we have more messages than we want to keep, trim from the start
         if (historySize > keepCount) {
             int startIdx = historySize - keepCount;
             
@@ -116,24 +136,15 @@ public class ConversationHistory {
                 ", No trimming needed (history smaller than keep count)");
         }
     }
-    
-    public String getSynopsis() {
-        return synopsis;
-    }
-    
-    private List<Message> getRecentMessages() {
-        return new ArrayList<>(currentHistory);
-    }
  
     /**
-     * Get messages that should be condensed into synopsis
+     * Get messages that should be condensed into synopsis (OLD messages beyond window)
      */
-    public List<Message> getExchangesForSynopsis(ConversationHistory history, int windowSize) {
-        int historySize = history.getCurrentHistorySize();
+    public List<Message> getExchangesForSynopsis(int windowSize) {
+        int historySize = currentHistory.size();
         int keepCount = windowSize * 2;  // We keep this many recent messages
         
         // Calculate how many OLD messages exist (beyond the keep window)
-        // These are the ones that should be condensed
         int oldMessagesCount = historySize - keepCount;
         
         log.info("[ConversationHistory] getExchangesForSynopsis - Window size: " + windowSize +
@@ -150,11 +161,12 @@ public class ConversationHistory {
         return new ArrayList<>(currentHistory.subList(0, oldMessagesCount));
     }
     
-    
+    /**
+     * Get conversation for extraction (planning -> stanza setup)
+     */
     public List<Message> getConversationForExtraction() {
         return new ArrayList<>(currentHistory);
     }
-    
     
     public void clear() {
         fullHistory.clear();
@@ -165,8 +177,8 @@ public class ConversationHistory {
 	public void clearHistory() {
 		currentHistory.clear();
 	    synopsis = "";
-	    log.info("[ConversationHistory] History cleared");
-		
+	    log.info("[ConversationHistory] Current history and synopsis cleared");
+	    log.info("[ConversationHistory] Full history preserved for logging: " + fullHistory.size() + " messages");
 	}
 
 	public int getCurrentHistorySize() {

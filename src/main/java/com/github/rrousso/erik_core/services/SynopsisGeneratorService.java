@@ -9,7 +9,8 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 
 /**
- * Spring service for generating rolling synopses with dual-model support
+ * Spring service for generating synopses using template-based prompts.
+ * Strips OOC commands and uses synopsis + currentHistory for complete context.
  */
 @Service
 public class SynopsisGeneratorService {
@@ -27,56 +28,122 @@ public class SynopsisGeneratorService {
     }
     
     /**
-     * Generate rolling synopsis for current conversation segment
-     * Uses NARRATIVE model (Claude) for quality
+     * Generate rolling synopsis using world_snapshot_synopsis template
+     * Uses ANALYTICAL model (Gemini) for efficiency
+     * Uses trimmed currentHistory (frequent, efficient updates)
      */
     public String generateSynopsis(ConversationHistory history) throws Exception {
     	
         int threshold = getSynopsisThreshold();
     	
-
         if (history.getCurrentHistorySize() < threshold) {
             return history.getSynopsis();
         }
 
-        String exchangeText = generateExchange(history);
+        // Get OLD messages that need to be condensed
+        List<ConversationHistory.Message> oldMessages = history.getExchangesForSynopsis(getWindowSize());
         
-
-        if (exchangeText.isEmpty()) {
+        if (oldMessages.isEmpty()) {
             log.info("[Synopsis] No old messages to condense yet. Skipping synopsis generation.");
             return history.getSynopsis();
         }
         
-        log.info("[Synopsis] Exchange text to be condensed (" + exchangeText.length() + " chars):");
+        // Format old messages as text (with OOC stripped)
+        String exchangeText = formatMessagesAsText(oldMessages, true);
+        log.info("[Synopsis] Exchange text to be condensed (" + exchangeText.length() + " chars)");
 
         String previousSynopsis = history.getSynopsis();
-        log.info("[Synopsis] Previous synopsis (" + previousSynopsis.length() + " chars):");
-
         if (previousSynopsis.isEmpty()) {
-            previousSynopsis = "[No previous synopsis]";
+            previousSynopsis = "[No previous snapshot]";
         }
+        log.info("[Synopsis] Previous synopsis (" + previousSynopsis.length() + " chars)");
 
-        log.info("[System] Generating synopsis...");
+        // Get template and fill it in
+        String template = promptBuilder.buildWorldSnapshotPrompt();
+        String filledPrompt = template
+            .replace("${previousSnapshot}", previousSynopsis)
+            .replace("${exchangeText}", exchangeText);
 
-        String synopsisPrompt = "Condense the following conversation into a brief synopsis. " +
-            "Extract key events, decisions, and important details. " +
-            "Previous synopsis: " + previousSynopsis + "\n\n" +
-            "Recent exchanges:\n" + exchangeText + "\n\n" +
-            "Create an updated synopsis:";
+        log.info("[System] Generating rolling synopsis using world_snapshot template..." + filledPrompt);
 
-
-        // Use NARRATIVE model for rolling synopsis (needs quality)
+        // Use ANALYTICAL model - simple call with filled template as user prompt
         String newSynopsis = llmClient.call(
             ModelType.ANALYTICAL,
-            "You are a helpful assistant that creates concise summaries.",
-            synopsisPrompt
+            "You create concise world snapshot synopses.",
+            filledPrompt
         );
 
-        log.info("[Synopsis] Generated new synopsis (" + newSynopsis.length() + " chars):");
+        log.info("[Synopsis] Generated new synopsis (" + newSynopsis.length() + " chars)");
 
         history.updateSynopsis(newSynopsis, getWindowSize());
 
         return newSynopsis;
+    }
+    
+    /**
+     * Generate quick synopsis using template
+     * Uses ANALYTICAL model (Gemini) for speed
+     * Uses synopsis + currentHistory for complete context
+     */
+    public String generateQuickSynopsis(ConversationHistory history) throws Exception {
+
+        String synopsis = history.getSynopsis();
+        String recentMessages = formatMessagesAsText(history.getAllMessages(), true);
+        
+        log.info("[QuickSynopsis] Using synopsis (" + synopsis.length() + " chars) + " +
+                "recent messages (" + history.getAllMessages().size() + " messages)");
+
+        // Get template and fill it in
+        String template = promptBuilder.buildQuickSynopsisPrompt();
+        String filledPrompt = template
+            .replace("${previousSnapshot}", synopsis.isEmpty() ? "[Start of stanza]" : synopsis)
+            .replace("${conversationText}", recentMessages);
+
+        log.info("[QuickSynopsis] Generating quick synopsis...");
+
+        // Use ANALYTICAL model
+        String result = llmClient.call(
+            ModelType.ANALYTICAL,
+            filledPrompt,
+            "Create the brief narrative summary."
+        );
+
+        log.info("[QuickSynopsis] Generated (" + result.length() + " chars)");
+
+        return result;
+    }
+
+    /**
+     * Generate detailed synopsis using template
+     * Uses NARRATIVE model (Claude) for comprehensive quality
+     * Uses synopsis + currentHistory for complete context
+     */
+    public String generateDetailedSynopsis(ConversationHistory history) throws Exception {
+
+        String synopsis = history.getSynopsis();
+        String recentMessages = formatMessagesAsText(history.getAllMessages(), true);  
+
+        log.info("[DetailedSynopsis] Using synopsis (" + synopsis.length() + " chars) + " +
+                "recent messages (" + history.getAllMessages().size() + " messages)");
+
+        // Get template and fill it in
+        String template = promptBuilder.buildDetailedSynopsisPrompt();
+        String filledPrompt = template
+            .replace("${previousSnapshot}", synopsis.isEmpty() ? "[Start of stanza]" : synopsis)
+            .replace("${conversationText}", recentMessages);
+
+        log.info("[DetailedSynopsis] Generating detailed synopsis...");
+
+        // Use NARRATIVE model for quality
+        String result = llmClient.call(
+            ModelType.NARRATIVE,
+            filledPrompt,
+            "Create the detailed synopsis."
+        );
+
+        log.info("[DetailedSynopsis] Generated (" + result.length() + " chars)");
+
+        return result;
     }
     
     /**
@@ -85,97 +152,61 @@ public class SynopsisGeneratorService {
      */
     public String generatePauseChanges(ConversationHistory history) throws Exception {
         
-        List<ConversationHistory.Message> voidMessages = history.getMessagesForAPI();
-        
-        // Build conversation text
-        StringBuilder conversationText = new StringBuilder();
-        for (ConversationHistory.Message msg : voidMessages) {
-            conversationText.append(msg.getRole().toUpperCase())
-                           .append(": ")
-                           .append(msg.getContent())
-                           .append("\n\n");
-        }
+        String conversationText = formatMessagesAsText(history.getAllMessages(), false);
         
         String systemPrompt = promptBuilder.buildChangeDistillerPrompt();
-        String userPrompt = conversationText.toString();
         
-        // Use ANALYTICAL model for change detection (simple extraction)
+        // Use ANALYTICAL model for change detection
         return llmClient.call(
             ModelType.ANALYTICAL,
             systemPrompt,
-            userPrompt
+            conversationText
         );
     }
 
     /**
-     * Generate exchanges text for synopsis
-     * FIXED: Returns empty string if no old messages to condense
+     * Helper: Format message list as text
+     * @param stripOOC If true, removes text in ((double parentheses))
      */
-    private String generateExchange(ConversationHistory history) {
-        List<ConversationHistory.Message> exchanges = 
-        		history.getExchangesForSynopsis(history, getWindowSize());
-        
-        if (exchanges.isEmpty()) {
-            return "";  // Return empty string, not synopsis
+    private String formatMessagesAsText(List<ConversationHistory.Message> messages, boolean stripOOC) {
+        if (messages.isEmpty()) {
+            return "";
         }
         
-        StringBuilder exchangeText = new StringBuilder();
-        for (ConversationHistory.Message msg : exchanges) {
-            exchangeText.append(msg.getRole().toUpperCase())
-                       .append(": ")
-                       .append(msg.getContent())
-                       .append("\n\n");
+        StringBuilder text = new StringBuilder();
+        for (ConversationHistory.Message msg : messages) {
+            String content = msg.getContent();
+            
+            // Strip OOC commands if requested
+            if (stripOOC) {
+                content = stripOOCCommands(content);
+            }
+            
+            // Skip if content is empty after stripping
+            if (content.trim().isEmpty()) {
+                continue;
+            }
+            
+            text.append(msg.getRole().toUpperCase())
+                .append(": ")
+                .append(content)
+                .append("\n\n");
         }
-        return exchangeText.toString();
+        return text.toString();
     }
     
     /**
-     * Generate quick synopsis for stanza identification
-     * Uses ANALYTICAL model (Gemini) - simple summarization
+     * Remove out-of-character commands in ((double parentheses))
+     * This prevents meta-awareness in synopses
      */
-    public String generateQuickSynopsis(ConversationHistory history) throws Exception {
-
-        List<ConversationHistory.Message> messages = history.getMessagesForAPI();
-
-        String systemPrompt = promptBuilder.buildQuickSynopsisPrompt();
-        String userPrompt = "Based on the previous conversations, create the quick narrative summary.";
-
-        log.info("[QuickSynopsis] System prompt length: " + systemPrompt.length() + " chars");
-
-        // Use ANALYTICAL model (Gemini) - fast and cheap for brief summaries
-        String result = llmClient.callWithHistory(
-            ModelType.ANALYTICAL,
-            systemPrompt,
-            userPrompt,
-            messages
-        );
-
-        return result;
-    }
-
-    /**
-     * Generate detailed synopsis for future reference
-     * Uses NARRATIVE model (Claude) - needs comprehensive quality
-     */
-    public String generateDetailedSynopsis(ConversationHistory history) throws Exception {
-
-
-        List<ConversationHistory.Message> messages = history.getMessagesForAPI();
-
-        String systemPrompt = promptBuilder.buildDetailedSynopsisPrompt();
-        String userPrompt = "Based on the previous conversations, create the detailed setup document.";
-
-        log.info("[DetailedSynopsis] System prompt length: " + systemPrompt.length() + " chars");
-
-        // Use NARRATIVE model (Claude) - comprehensive documentation needs quality
-        String result = llmClient.callWithHistory(
-            ModelType.NARRATIVE,
-            systemPrompt,
-            userPrompt,
-            messages
-        );
-
-        return result;
+    private String stripOOCCommands(String text) {
+        // Remove text in ((double parentheses))
+        String stripped = text.replaceAll("\\(\\([^)]*\\)\\)", "");
+        
+        // Clean up extra whitespace
+        stripped = stripped.replaceAll("\\s+", " ").trim();
+        
+        return stripped;
     }
     
     public boolean shouldGenerateSynopsis(ConversationHistory history) {
