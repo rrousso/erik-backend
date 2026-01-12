@@ -1,10 +1,14 @@
-package com.github.rrousso.erik_core.flags;
+package com.github.rrousso.erik_core.services;
 
-import com.github.rrousso.erik_core.llm.LLMClientService;
-import com.github.rrousso.erik_core.llm.ModelType;
-import com.github.rrousso.erik_core.prompt.SystemPromptBuilderService;
-import com.github.rrousso.erik_core.stanza.StanzaStatus;
+import com.github.rrousso.erik_core.Entities.Flag;
+import com.github.rrousso.erik_core.Entities.ModelType;
+import com.github.rrousso.erik_core.Entities.StanzaStatus;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+
+import java.util.Objects;
 
 /**
  * Service for detecting system flags from user input using a lightweight analytical model.
@@ -13,12 +17,16 @@ import org.springframework.stereotype.Service;
 @Service
 public class FlagDetectorService {
     
+    private static final Logger log = LoggerFactory.getLogger(FlagDetectorService.class);
+    
     private final LLMClientService llmClient;
     private final SystemPromptBuilderService promptBuilder;
     
     public FlagDetectorService(LLMClientService llmClient, SystemPromptBuilderService promptBuilder) {
         this.llmClient = llmClient;
         this.promptBuilder = promptBuilder;
+        
+        log.info("FlagDetectorService initialized");
     }
     
     /**
@@ -59,17 +67,29 @@ public class FlagDetectorService {
      * Detect flag from user input based on current stanza status
      */
     public Flag detect(String userInput, StanzaStatus currentStatus) {
+        // Input validation
+        Objects.requireNonNull(userInput, "userInput cannot be null");
+        Objects.requireNonNull(currentStatus, "currentStatus cannot be null");
+        
+        if (userInput.isBlank()) {
+            log.warn("Empty user input provided to flag detector");
+            return Flag.NONE;
+        }
+        
         try {
-            
             String prompt = buildFlagDetectionPrompt(userInput, currentStatus);
             String response = llmClient.call(ModelType.ANALYTICAL, "", prompt);
             
             Flag flag = parseResponse(response.trim(), currentStatus);
+            
+            // Debug logging
+            log.debug("Flag detection - Input: \"{}\", Status: {}, Response: \"{}\", Flag: {}", 
+                userInput, currentStatus, response.trim(), flag);
   
             return flag;
         } catch (Exception e) {
-            System.err.println("[FlagDetector] Error detecting flag: " + e.getMessage());
-            // On error, assume no flag and route based on current status
+            log.error("Error detecting flag from input: \"{}\"", userInput, e);
+            // On error, assume no flag
             return Flag.NONE;
         }
     }
@@ -82,31 +102,39 @@ public class FlagDetectorService {
         String availableFlags = getAvailableFlags(currentStatus);
         
         return template
-            .replace("{STATUS}", currentStatus.getLabel())
+            .replace("{STATUS}", currentStatus.name())
             .replace("{AVAILABLE_FLAGS}", availableFlags)
             .replace("{USER_INPUT}", userInput);
     }
     
     /**
      * Get available flags based on current status
+     * IMPORTANT: Keep these simple and clear - just the command names
      */
     private String getAvailableFlags(StanzaStatus currentStatus) {
         return switch (currentStatus) {
-            case NONE -> "START (to begin a new stanza)";
-            case ACTIVE -> "PAUSE, END, ABANDON (during active stanza)";
-            case PAUSED -> "CONTINUE (to resume stanza)";
-            case ABANDONED -> "START (to begin a new stanza after abandoning previous)";
-            case COMPLETED -> "NONE (stanza is completed, no commands available)";
+            case NONE -> "START";
+            case ACTIVE -> "PAUSE, END, ABANDON";
+            case PAUSED -> "CONTINUE";
+            case ABANDONED -> "START";
+            case COMPLETED -> "NONE";
         };
     }
     
     /**
-     * Parse the LLM response into a FlagDetectionResult
+     * Parse the LLM response into a Flag
+     * FIXED: Check for NONE first to avoid "NONE".contains("END") bug!
      */
     private Flag parseResponse(String response, StanzaStatus currentStatus) {
         String cleanResponse = response.toUpperCase().trim();
         
-        // Extract just the flag word (remove any extra text)
+        // CRITICAL: Check for NONE first! 
+        // Otherwise "NONE".contains("END") returns true
+        if (cleanResponse.equals("NONE") || cleanResponse.contains("NO COMMAND")) {
+            return Flag.NONE;
+        }
+        
+        // Now check for actual commands
         Flag flag = Flag.NONE;
         
         if (cleanResponse.contains("START")) {
@@ -121,7 +149,27 @@ public class FlagDetectorService {
             flag = Flag.ABANDON_STANZA;
         }
         
+        // VALIDATION: Ensure the detected flag is actually valid for current status
+        if (!isValidFlagForStatus(flag, currentStatus)) {
+            log.warn("Detected flag {} is not valid for status {}. Returning NONE.", 
+                flag, currentStatus);
+            return Flag.NONE;
+        }
+        
         return flag;
     }
-
+    
+    /**
+     * Validate that a flag is available for the current status
+     */
+    private boolean isValidFlagForStatus(Flag flag, StanzaStatus status) {
+        return switch (status) {
+            case NONE -> flag == Flag.START_STANZA || flag == Flag.NONE;
+            case ACTIVE -> flag == Flag.PAUSE_STANZA || flag == Flag.END_STANZA || 
+                          flag == Flag.ABANDON_STANZA || flag == Flag.NONE;
+            case PAUSED -> flag == Flag.CONTINUE_STANZA || flag == Flag.NONE;
+            case ABANDONED -> flag == Flag.START_STANZA || flag == Flag.NONE;
+            case COMPLETED -> flag == Flag.NONE;
+        };
+    }
 }

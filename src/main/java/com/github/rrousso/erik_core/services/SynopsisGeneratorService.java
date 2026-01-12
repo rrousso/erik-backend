@@ -1,11 +1,11 @@
-package com.github.rrousso.erik_core.conversation;
+package com.github.rrousso.erik_core.services;
 
-import com.github.rrousso.erik_core.llm.LLMClientService;
-import com.github.rrousso.erik_core.llm.ModelType;
-import com.github.rrousso.erik_core.prompt.SystemPromptBuilderService;
+import com.github.rrousso.erik_core.Entities.ConversationHistory;
+import com.github.rrousso.erik_core.Entities.ModelType;
 
 import org.springframework.stereotype.Service;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.List;
 
 /**
@@ -14,12 +14,16 @@ import java.util.List;
 @Service
 public class SynopsisGeneratorService {
     
+	private static final Logger log = LoggerFactory.getLogger(ConversationHistory.class);
+	
     private final LLMClientService llmClient;
     private final SystemPromptBuilderService promptBuilder;
+    private final ConfigService configService;
     
-    public SynopsisGeneratorService(LLMClientService llmClient, SystemPromptBuilderService promptBuilder) {
+    public SynopsisGeneratorService(LLMClientService llmClient, SystemPromptBuilderService promptBuilder, ConfigService configService) {
         this.llmClient = llmClient;
         this.promptBuilder = promptBuilder;
+        this.configService = configService;
     }
     
     /**
@@ -27,30 +31,32 @@ public class SynopsisGeneratorService {
      * Uses NARRATIVE model (Claude) for quality
      */
     public String generateSynopsis(ConversationHistory history) throws Exception {
-
-        if (!history.shouldGenerateSynopsis()) {
+    	
+        int threshold = getSynopsisThreshold();
+    	
+        // FIXED: Return early if we haven't reached the threshold yet
+        if (history.getCurrentHistorySize() < threshold) {
             return history.getSynopsis();
         }
 
-        System.out.println("\n========== ROLLING SYNOPSIS GENERATION START ==========");
-
         String exchangeText = generateExchange(history);
-        System.out.println("[Synopsis] Exchange text to be condensed (" + exchangeText.length() + " chars):");
-        System.out.println("--- BEGIN EXCHANGE TEXT ---");
-        System.out.println(exchangeText);
-        System.out.println("--- END EXCHANGE TEXT ---");
+        
+        // NEW FIX: If there's nothing to condense, skip the LLM call
+        if (exchangeText.isEmpty()) {
+            log.info("[Synopsis] No old messages to condense yet. Skipping synopsis generation.");
+            return history.getSynopsis();
+        }
+        
+        log.info("[Synopsis] Exchange text to be condensed (" + exchangeText.length() + " chars):");
 
         String previousSynopsis = history.getSynopsis();
-        System.out.println("[Synopsis] Previous synopsis (" + previousSynopsis.length() + " chars):");
-        System.out.println("--- BEGIN PREVIOUS SYNOPSIS ---");
-        System.out.println(previousSynopsis.isEmpty() ? "[No previous synopsis]" : previousSynopsis);
-        System.out.println("--- END PREVIOUS SYNOPSIS ---");
+        log.info("[Synopsis] Previous synopsis (" + previousSynopsis.length() + " chars):");
 
         if (previousSynopsis.isEmpty()) {
             previousSynopsis = "[No previous synopsis]";
         }
 
-        System.out.println("[System] Generating synopsis...");
+        log.info("[System] Generating synopsis...");
 
         String synopsisPrompt = "Condense the following conversation into a brief synopsis. " +
             "Extract key events, decisions, and important details. " +
@@ -58,10 +64,6 @@ public class SynopsisGeneratorService {
             "Recent exchanges:\n" + exchangeText + "\n\n" +
             "Create an updated synopsis:";
 
-        System.out.println("[Synopsis] Full prompt being sent to LLM:");
-        System.out.println("--- BEGIN SYNOPSIS PROMPT ---");
-        System.out.println(synopsisPrompt);
-        System.out.println("--- END SYNOPSIS PROMPT ---");
 
         // Use NARRATIVE model for rolling synopsis (needs quality)
         String newSynopsis = llmClient.call(
@@ -70,13 +72,9 @@ public class SynopsisGeneratorService {
             synopsisPrompt
         );
 
-        System.out.println("[Synopsis] Generated new synopsis (" + newSynopsis.length() + " chars):");
-        System.out.println("--- BEGIN NEW SYNOPSIS ---");
-        System.out.println(newSynopsis);
-        System.out.println("--- END NEW SYNOPSIS ---");
+        log.info("[Synopsis] Generated new synopsis (" + newSynopsis.length() + " chars):");
 
-        history.updateSynopsis(newSynopsis);
-        System.out.println("========== ROLLING SYNOPSIS GENERATION END ==========\n");
+        history.updateSynopsis(newSynopsis, getWindowSize());
 
         return newSynopsis;
     }
@@ -111,13 +109,14 @@ public class SynopsisGeneratorService {
 
     /**
      * Generate exchanges text for synopsis
+     * FIXED: Returns empty string if no old messages to condense
      */
     private String generateExchange(ConversationHistory history) {
         List<ConversationHistory.Message> exchanges = 
-            history.getExchangesForSynopsis();
+        		history.getExchangesForSynopsis(history, getWindowSize());
         
         if (exchanges.isEmpty()) {
-            return history.getSynopsis();
+            return "";  // Return empty string, not synopsis
         }
         
         StringBuilder exchangeText = new StringBuilder();
@@ -135,22 +134,13 @@ public class SynopsisGeneratorService {
      * Uses ANALYTICAL model (Gemini) - simple summarization
      */
     public String generateQuickSynopsis(ConversationHistory history) throws Exception {
-        System.out.println("\n========== QUICK SYNOPSIS GENERATION START ==========");
 
         List<ConversationHistory.Message> messages = history.getMessagesForAPI();
-        System.out.println("[QuickSynopsis] Message count: " + messages.size());
-        System.out.println("[QuickSynopsis] Messages being sent:");
-        for (int i = 0; i < messages.size(); i++) {
-            ConversationHistory.Message msg = messages.get(i);
-            System.out.println("  [" + i + "] " + msg.getRole() + ": " +
-                (msg.getContent().length() > 100 ? msg.getContent().substring(0, 100) + "..." : msg.getContent()));
-        }
 
         String systemPrompt = promptBuilder.buildQuickSynopsisPrompt();
         String userPrompt = "Based on the previous conversations, create the quick narrative summary.";
 
-        System.out.println("[QuickSynopsis] System prompt length: " + systemPrompt.length() + " chars");
-        System.out.println("[QuickSynopsis] User prompt: " + userPrompt);
+        log.info("[QuickSynopsis] System prompt length: " + systemPrompt.length() + " chars");
 
         // Use ANALYTICAL model (Gemini) - fast and cheap for brief summaries
         String result = llmClient.callWithHistory(
@@ -160,12 +150,6 @@ public class SynopsisGeneratorService {
             messages
         );
 
-        System.out.println("[QuickSynopsis] Generated synopsis (" + result.length() + " chars):");
-        System.out.println("--- BEGIN QUICK SYNOPSIS ---");
-        System.out.println(result);
-        System.out.println("--- END QUICK SYNOPSIS ---");
-        System.out.println("========== QUICK SYNOPSIS GENERATION END ==========\n");
-
         return result;
     }
 
@@ -174,22 +158,14 @@ public class SynopsisGeneratorService {
      * Uses NARRATIVE model (Claude) - needs comprehensive quality
      */
     public String generateDetailedSynopsis(ConversationHistory history) throws Exception {
-        System.out.println("\n========== DETAILED SYNOPSIS GENERATION START ==========");
+
 
         List<ConversationHistory.Message> messages = history.getMessagesForAPI();
-        System.out.println("[DetailedSynopsis] Message count: " + messages.size());
-        System.out.println("[DetailedSynopsis] Messages being sent:");
-        for (int i = 0; i < messages.size(); i++) {
-            ConversationHistory.Message msg = messages.get(i);
-            System.out.println("  [" + i + "] " + msg.getRole() + ": " +
-                (msg.getContent().length() > 100 ? msg.getContent().substring(0, 100) + "..." : msg.getContent()));
-        }
 
         String systemPrompt = promptBuilder.buildDetailedSynopsisPrompt();
         String userPrompt = "Based on the previous conversations, create the detailed setup document.";
 
-        System.out.println("[DetailedSynopsis] System prompt length: " + systemPrompt.length() + " chars");
-        System.out.println("[DetailedSynopsis] User prompt: " + userPrompt);
+        log.info("[DetailedSynopsis] System prompt length: " + systemPrompt.length() + " chars");
 
         // Use NARRATIVE model (Claude) - comprehensive documentation needs quality
         String result = llmClient.callWithHistory(
@@ -199,12 +175,19 @@ public class SynopsisGeneratorService {
             messages
         );
 
-        System.out.println("[DetailedSynopsis] Generated synopsis (" + result.length() + " chars):");
-        System.out.println("--- BEGIN DETAILED SYNOPSIS ---");
-        System.out.println(result);
-        System.out.println("--- END DETAILED SYNOPSIS ---");
-        System.out.println("========== DETAILED SYNOPSIS GENERATION END ==========\n");
-
         return result;
+    }
+    
+    public boolean shouldGenerateSynopsis(ConversationHistory history) {
+        int threshold = getSynopsisThreshold();
+        return history.getCurrentHistorySize() >= threshold;
+    }
+    
+    private int getWindowSize() {
+        return configService.getWindowSize();
+    }
+    
+    private int getSynopsisThreshold() {
+        return configService.getThresholdSize();
     }
 }

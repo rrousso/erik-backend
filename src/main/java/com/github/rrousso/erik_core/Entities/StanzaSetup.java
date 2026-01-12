@@ -1,4 +1,4 @@
-package com.github.rrousso.erik_core.stanza;
+package com.github.rrousso.erik_core.Entities;
 
 import java.util.ArrayList;
 import java.util.List;

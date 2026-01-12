@@ -1,9 +1,4 @@
-package com.github.rrousso.erik_core.state;
-
-import com.github.rrousso.erik_core.conversation.ConversationHistory;
-import com.github.rrousso.erik_core.stanza.CompletedStanza;
-import com.github.rrousso.erik_core.stanza.StanzaSetup;
-import com.github.rrousso.erik_core.stanza.StanzaStatus;
+package com.github.rrousso.erik_core.Entities;
 
 public class SessionState {
 
@@ -19,9 +14,9 @@ public class SessionState {
     private StanzaStatus stanzaStatus = StanzaStatus.NONE;
     private CompletedStanza completedStanza = null;
 
-    public SessionState(ConversationHistory stanzaHistory, ConversationHistory voidHistory) {
-        this.stanzaHistory = stanzaHistory;
-        this.voidHistory = voidHistory;
+    public SessionState() {
+        this.stanzaHistory = new ConversationHistory();
+        this.voidHistory = new ConversationHistory();
     }
 
     // Getters

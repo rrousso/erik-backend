@@ -1,4 +1,4 @@
-package com.github.rrousso.erik_core.stanza;
+package com.github.rrousso.erik_core.Entities;
 
 public class CompletedStanza {
 	

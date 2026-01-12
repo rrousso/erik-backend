@@ -1,9 +1,8 @@
-package com.github.rrousso.erik_core.prompt;
+package com.github.rrousso.erik_core.services;
 
-import com.github.rrousso.erik_core.config.ConfigService;
-import com.github.rrousso.erik_core.stanza.StanzaSetup;
-import com.github.rrousso.erik_core.stanza.StanzaStatus;
-import com.github.rrousso.erik_core.state.SessionState;
+import com.github.rrousso.erik_core.Entities.SessionState;
+import com.github.rrousso.erik_core.Entities.StanzaSetup;
+import com.github.rrousso.erik_core.Entities.StanzaStatus;
 
 import org.springframework.stereotype.Service;
 
@@ -74,7 +73,11 @@ public class SystemPromptBuilderService {
         // Add status-specific context
         if (state.getStanzaStatus() == StanzaStatus.ACTIVE) {
             prompt.append("\n\n");
-            prompt.append("CONTEXT: The user has confirmed starting the stanza. Do not ask for confirmation. Transition naturally into final setup or closing.");
+            // FIXED: More explicit instruction to NOT narrate
+            prompt.append("CONTEXT: The user has confirmed starting the stanza. ");
+            prompt.append("Simply acknowledge their readiness with a brief, enthusiastic response (1-2 sentences). ");
+            prompt.append("Do NOT narrate the scene. Do NOT describe what happens next. ");
+            prompt.append("The Narrator will handle the actual scene - you are still in planning mode, just wrapping up.");
             
         }else if (state.getStanzaStatus() == StanzaStatus.PAUSED) {
             prompt.append("\n\n");

@@ -1,4 +1,4 @@
-package com.github.rrousso.erik_core.flags;
+package com.github.rrousso.erik_core.Entities;
 
 /**
  * Enum of all possible system flags

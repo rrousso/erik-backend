@@ -4,7 +4,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ConfigurableApplicationContext;
 
-import com.github.rrousso.erik_core.console.ConsoleRunner;
+import com.github.rrousso.erik_core.controllers.ConsoleRunner;
 
 @SpringBootApplication
 public class ErikCoreApplication {

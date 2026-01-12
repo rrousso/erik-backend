@@ -1,15 +1,20 @@
-package com.github.rrousso.erik_core.llm;
+package com.github.rrousso.erik_core.services;
 
-import com.github.rrousso.erik_core.config.ConfigService;
-import com.github.rrousso.erik_core.conversation.ConversationHistory;
+import com.github.rrousso.erik_core.Entities.ConversationHistory;
+import com.github.rrousso.erik_core.Entities.ModelType;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 /**
  * Spring-managed LLM client service with support for multiple model types.
@@ -17,13 +22,26 @@ import java.util.Locale;
  */
 @Service
 public class LLMClientService {
-
+    
+    private static final Logger log = LoggerFactory.getLogger(LLMClientService.class);
+    
     private static final String API_URL = "https://openrouter.ai/api/v1/chat/completions";
-    private final HttpClient client = HttpClient.newHttpClient();
+    private static final int CONNECT_TIMEOUT_SECONDS = 30;
+    private static final int REQUEST_TIMEOUT_SECONDS = 120;
+    
+    private final HttpClient client;
     private final ConfigService configService;
     
     public LLMClientService(ConfigService configService) {
         this.configService = configService;
+        
+        // Configure HTTP client with timeouts
+        this.client = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(CONNECT_TIMEOUT_SECONDS))
+            .build();
+        
+        log.info("LLMClientService initialized with {}s connect timeout and {}s request timeout",
+            CONNECT_TIMEOUT_SECONDS, REQUEST_TIMEOUT_SECONDS);
     }
 
     /**
@@ -37,9 +55,14 @@ public class LLMClientService {
      * Simple system + user prompt call with model type selection
      */
     public String call(ModelType modelType, String systemPrompt, String userPrompt) throws Exception {
+        // Input validation
+        Objects.requireNonNull(modelType, "modelType cannot be null");
+        Objects.requireNonNull(systemPrompt, "systemPrompt cannot be null");
+        Objects.requireNonNull(userPrompt, "userPrompt cannot be null");
+        
         ModelConfig config = getModelConfig(modelType);
 
-        System.out.println("\n[LLM] Preparing simple call to " + modelType + " model: " + config.model);
+        log.info("Preparing simple call to {} model: {}", modelType, config.model);
 
         String body = String.format(Locale.US, """
         {
@@ -59,10 +82,7 @@ public class LLMClientService {
             config.maxTokens
         );
 
-        System.out.println("[LLM] Request body (" + body.length() + " chars):");
-        System.out.println("--- BEGIN REQUEST BODY ---");
-        System.out.println(body);
-        System.out.println("--- END REQUEST BODY ---");
+        log.debug("Request body length: {} chars", body.length());
 
         return sendRequest(body, modelType.toString());
     }
@@ -86,10 +106,16 @@ public class LLMClientService {
             String userPrompt,
             List<ConversationHistory.Message> history) throws Exception {
 
+        // Input validation
+        Objects.requireNonNull(modelType, "modelType cannot be null");
+        Objects.requireNonNull(systemPrompt, "systemPrompt cannot be null");
+        Objects.requireNonNull(userPrompt, "userPrompt cannot be null");
+        Objects.requireNonNull(history, "history cannot be null");
+
         ModelConfig config = getModelConfig(modelType);
 
-        System.out.println("\n[LLM] Preparing callWithHistory to " + modelType + " model: " + config.model);
-        System.out.println("[LLM] History message count: " + history.size());
+        log.info("Preparing callWithHistory to {} model: {} with {} history messages", 
+            modelType, config.model, history.size());
 
         StringBuilder messagesJson = new StringBuilder();
         messagesJson.append("[");
@@ -128,10 +154,7 @@ public class LLMClientService {
             "  \"max_tokens\": " + config.maxTokens + "\n" +
             "}";
 
-        System.out.println("[LLM] Request body (" + body.length() + " chars):");
-        System.out.println("--- BEGIN REQUEST BODY ---");
-        System.out.println(body);
-        System.out.println("--- END REQUEST BODY ---");
+        log.debug("Request body length: {} chars", body.length());
 
         return sendRequest(body, modelType.toString());
     }
@@ -160,10 +183,11 @@ public class LLMClientService {
     private String sendRequest(String body, String modelType) throws Exception {
         String apiKey = configService.getApiKey();
         if (apiKey == null || apiKey.isEmpty()) {
+            log.error("API key not configured");
             throw new RuntimeException("API key not configured. Set OPENROUTER_API_KEY environment variable or in application.yml");
         }
 
-        System.out.println("[LLM] Sending request to OpenRouter API...");
+        log.debug("Sending request to OpenRouter API...");
 
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(API_URL))
@@ -171,23 +195,16 @@ public class LLMClientService {
             .header("Content-Type", "application/json")
             .header("HTTP-Referer", "http://localhost")
             .header("X-Title", "Erik-Assistant")
+            .timeout(Duration.ofSeconds(REQUEST_TIMEOUT_SECONDS))
             .POST(HttpRequest.BodyPublishers.ofString(body))
             .build();
 
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
-        System.out.println("[LLM] Received response (HTTP " + response.statusCode() + ")");
-        System.out.println("[LLM] Raw response body (" + response.body().length() + " chars):");
-        System.out.println("--- BEGIN RESPONSE BODY ---");
-        System.out.println(response.body());
-        System.out.println("--- END RESPONSE BODY ---");
+        log.info("Received response (HTTP {})", response.statusCode());
+        log.debug("Response body length: {} chars", response.body().length());
 
         String extractedContent = extractContent(response.body());
-
-        System.out.println("[LLM] Extracted content (" + extractedContent.length() + " chars):");
-        System.out.println("--- BEGIN EXTRACTED CONTENT ---");
-        System.out.println(extractedContent);
-        System.out.println("--- END EXTRACTED CONTENT ---");
 
         return extractedContent;
     }
@@ -203,16 +220,19 @@ public class LLMClientService {
 
     private String extractContent(String json) {
         if (json.contains("\"error\"")) {
+            log.error("Error in API response: {}", json);
             return "[ERROR IN RESPONSE]: " + json;
         }
         
         int contentIdx = json.indexOf("\"content\":");
         if (contentIdx == -1) {
+            log.error("No content field found in response");
             return "[ERROR: No content field found]";
         }
         
         int start = json.indexOf("\"", contentIdx + 10);
         if (start == -1) {
+            log.error("Malformed content field in response");
             return "[ERROR: Malformed content field]";
         }
         

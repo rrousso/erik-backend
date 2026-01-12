@@ -1,4 +1,4 @@
-package com.github.rrousso.erik_core.prompt;
+package com.github.rrousso.erik_core.services;
 
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;

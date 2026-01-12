@@ -1,9 +1,9 @@
-package com.github.rrousso.erik_core.stanza;
+package com.github.rrousso.erik_core.services;
 
-import com.github.rrousso.erik_core.conversation.ConversationHistory;
-import com.github.rrousso.erik_core.llm.LLMClientService;
-import com.github.rrousso.erik_core.llm.ModelType;
-import com.github.rrousso.erik_core.prompt.SystemPromptBuilderService;
+import com.github.rrousso.erik_core.Entities.ConversationHistory;
+import com.github.rrousso.erik_core.Entities.ModelType;
+import com.github.rrousso.erik_core.Entities.StanzaSetup;
+
 import org.springframework.stereotype.Service;
 
 import java.util.List;
