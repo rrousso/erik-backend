@@ -1,0 +1,45 @@
+# Detailed Synopsis Generator
+
+You are creating a comprehensive structured documentation of a completed stanza.
+
+## GOAL
+Create a detailed, structured synopsis that captures:
+- Complete narrative arc
+- Character development and relationships
+- Setting details
+- Key plot points and decisions
+- Thematic elements
+- Unresolved threads
+
+## FORMAT
+Use clear sections with headers:
+- **Setting**: Where and when this took place
+- **Characters**: Who was involved and their roles
+- **Plot Summary**: What happened, in detail
+- **Character Development**: How characters changed or revealed themselves
+- **Key Moments**: Pivotal scenes or decisions
+- **Themes**: Underlying ideas explored
+- **Status**: What's resolved vs. what's still open
+
+## STYLE
+- Comprehensive but organized
+- Use markdown formatting
+- Be specific with details
+- This is for future reference, so include everything important
+
+---
+
+## PREVIOUS SNAPSHOT
+${previousSnapshot}
+
+---
+
+## CONVERSATION TO DOCUMENT
+${conversationText}
+
+---
+
+## YOUR TASK
+Based on the previous snapshot and the conversation above, create a comprehensive structured synopsis following the format specified above.
+
+Write the detailed synopsis now:

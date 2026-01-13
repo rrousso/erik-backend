@@ -1,0 +1,33 @@
+# Quick Synopsis Generator
+
+You are creating a brief narrative summary of a completed stanza (story segment).
+
+## GOAL
+Create a concise, engaging summary in approximately 150 words that captures:
+- The main events that occurred
+- Key character moments
+- The emotional arc
+- How it concluded
+
+## STYLE
+- Write in past tense, third person
+- Focus on narrative flow, not dry facts
+- Make it feel like a story recap
+- Keep it brief but compelling
+
+---
+
+## PREVIOUS SNAPSHOT
+${previousSnapshot}
+
+---
+
+## CONVERSATION TO SUMMARIZE
+${conversationText}
+
+---
+
+## YOUR TASK
+Based on the previous snapshot and the conversation above, create a brief narrative summary (approximately 150 words) that captures what happened in this stanza.
+
+Write the summary now:

@@ -1,0 +1,66 @@
+You are maintaining a WORLD STATE SNAPSHOT for an interactive narrative.
+
+This snapshot tracks BOTH:
+1. CURRENT STATE - What is true right now
+2. EVENT HISTORY - Key things that happened previously (condensed)
+
+The snapshot must be updated each turn using:
+- The previous snapshot
+- The recent exchanges
+- Any OOC directives ((like this))
+
+Newer information overrides older information in CURRENT STATE.
+New events are ADDED to EVENT HISTORY (condensed to prevent bloat).
+
+Text inside ((double parentheses)) is an OUT-OF-CHARACTER DIRECTIVE.
+It modifies the snapshot directly and must be applied, even if it contradicts earlier information.
+OOC text is invisible to the story but authoritative for the snapshot.
+
+Do NOT invent new facts.
+Do NOT merge private knowledge into public knowledge unless it was explicitly shared in-character.
+
+IMPORTANT COMPRESSION RULE:
+The updated snapshot must be SHORTER in total characters than:
+(PREVIOUS SNAPSHOT + RECENT EXCHANGES).
+If it is not shorter, you must condense EVENT HISTORY or remove low-importance details until it is.
+
+---
+
+## PREVIOUS SNAPSHOT
+${previousSnapshot}
+
+---
+
+## RECENT EXCHANGES
+${exchangeText}
+
+---
+
+Produce an UPDATED WORLD STATE SNAPSHOT in the following format:
+
+**EVENT HISTORY:**
+- Brief chronological summary of significant events that occurred in previous turns
+- Keep this condensed: only major plot points, character decisions, and scene changes
+- Example: "User discovered frozen Tokyo → explored maid café → café filled with customers → user departed"
+
+**CURRENT STATE - WORLD:**
+- Public facts about the setting, environment, and events that everyone can observe RIGHT NOW
+
+**CURRENT STATE - USER_ONLY:**
+- Information only the user knows RIGHT NOW (dashboards, thoughts, private data, meta info)
+
+**CURRENT STATE - CHARACTERS:**
+For each named character currently present or recently relevant:
+- What they know NOW
+- What they believe NOW
+- Their current emotional state toward the user NOW
+
+**META:**
+- Active rules, constraints, or OOC-defined conditions currently in effect
+
+Only include information that is currently true after applying all OOC directives and recent events.
+For CURRENT STATE: If something changed, update it — do not keep outdated versions.
+For EVENT HISTORY: Add new significant events, condense older ones to save space.
+
+Keep it concise, structured, and minimal.
+Remove anything that is no longer relevant to the ongoing story.

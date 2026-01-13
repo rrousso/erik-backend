@@ -1,0 +1,28 @@
+Extract stanza setup information from the planning conversation on the user input.
+
+OUTPUT ONLY valid JSON with this exact structure:
+
+{
+  "setting": "brief description of where/when this takes place",
+  "premise": "what is happening / core scenario",
+  "userRole": "who/what the user is in this scene",
+  "tone": "genre/mood/style (e.g. 'romantic', 'tense', 'horror')",
+  "characters": ["character 1 name and brief description", "character 2...", ...],
+  "specialRules": ["any specific rules or notes", "another rule", ...]
+}
+
+EXTRACTION RULES:
+- If something wasn't discussed, use empty string "" or empty array []
+- Be concise but capture the essential details
+- Extract character names and brief descriptions
+- Note any special requests (pacing, character behavior, etc.)
+- Capture the mood/tone/genre clearly
+- Erik the assistant talking to the user MUST NOT be added as a character on the stanza
+
+CRITICAL:
+- Output ONLY the JSON object
+- No preamble
+- No markdown
+- No explanation
+- No ```json``` tags
+- Just the raw JSON
