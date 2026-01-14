@@ -9,8 +9,7 @@ public enum Flag {
     CONTINUE_STANZA,    // User wants to continue from pause
     PAUSE_STANZA,       // User wants to pause the stanza
     END_STANZA,         // User wants to end the stanza
-    ABANDON_STANZA,     // User wants to abandon the stanza
-    NOT_IN_STANZA;      // User tried stanza action while in void
+    ABANDON_STANZA;     // User wants to abandon the stanza
     
     /**
      * Parse a flag string into an enum value

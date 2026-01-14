@@ -30,40 +30,6 @@ public class FlagDetectorService {
     }
     
     /**
-     * Result of flag detection including the flag and which mode should handle it
-     */
-    public static class FlagDetectionResult {
-        private final Flag flag;
-        private final RoutingMode routingMode;
-        
-        public FlagDetectionResult(Flag flag, RoutingMode routingMode) {
-            this.flag = flag;
-            this.routingMode = routingMode;
-        }
-        
-        public Flag getFlag() {
-            return flag;
-        }
-        
-        public RoutingMode getRoutingMode() {
-            return routingMode;
-        }
-        
-        public boolean hasFlag() {
-            return flag != Flag.NONE;
-        }
-    }
-    
-    /**
-     * Which mode should handle the user input
-     */
-    public enum RoutingMode {
-        VOID,    // Erik should handle this
-        STANZA,  // Narrator should handle this
-        SYSTEM   // System should handle directly (e.g., flag-only commands)
-    }
-    
-    /**
      * Detect flag from user input based on current stanza status
      */
     public Flag detect(String userInput, StanzaStatus currentStatus) {
@@ -128,8 +94,6 @@ public class FlagDetectorService {
     private Flag parseResponse(String response, StanzaStatus currentStatus) {
         String cleanResponse = response.toUpperCase().trim();
         
-        // CRITICAL: Check for NONE first! 
-        // Otherwise "NONE".contains("END") returns true
         if (cleanResponse.equals("NONE") || cleanResponse.contains("NO COMMAND")) {
             return Flag.NONE;
         }
