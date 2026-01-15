@@ -20,6 +20,8 @@ import com.github.rrousso.erik_core.entities.ModelType;
 import com.github.rrousso.erik_core.entities.SessionState;
 import com.github.rrousso.erik_core.entities.StanzaSetup;
 import com.github.rrousso.erik_core.entities.StanzaStatus;
+import com.github.rrousso.erik_core.repositories.PersonaRepository;
+import com.github.rrousso.erik_core.repositories.StanzaRecordRepository;
 
 
 @ExtendWith(MockitoExtension.class)
@@ -41,13 +43,17 @@ public class SessionFlowServiceTest {
 	@Mock
 	private FlagDetectorService flagDetector;
 	
+    private PersonaRepository personaRepository;
+    
+    private StanzaRecordRepository stanzaRecordRepository;
+	
 	private SessionFlowService sessionFlowService;
 	
 	private SessionState state;
 	
 	@BeforeEach
 	void setUp() {
-		sessionFlowService = new SessionFlowService(llmClient, promptBuilder, stanzaExtractor, synopsisGenerator, flagDetector);
+		sessionFlowService = new SessionFlowService(llmClient, promptBuilder, stanzaExtractor, synopsisGenerator, flagDetector, personaRepository, stanzaRecordRepository);
 		state = new SessionState();
 	}
 	

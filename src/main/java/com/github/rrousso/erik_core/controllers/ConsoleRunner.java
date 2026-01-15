@@ -1,9 +1,13 @@
 package com.github.rrousso.erik_core.controllers;
 
 import com.github.rrousso.erik_core.entities.SessionState;
+import com.github.rrousso.erik_core.entities.StanzaRecord;
+import com.github.rrousso.erik_core.repositories.StanzaRecordRepository;
+import com.github.rrousso.erik_core.services.ConfigService;
 import com.github.rrousso.erik_core.services.SessionFlowService;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Scanner;
 
 /**
@@ -12,15 +16,17 @@ import java.util.Scanner;
  */
 @Component
 public class ConsoleRunner {
-    private final SessionFlowService sessionFlow;
-    private final SessionState state = new SessionState();
-    
-    public ConsoleRunner(
-    		SessionFlowService sessionFlow) {
-        this.sessionFlow = sessionFlow;
+	private final SessionFlowService sessionFlow;
+	private final ConfigService configService;
+	private final StanzaRecordRepository stanzaRecordRepository;
+	private final SessionState state = new SessionState();
 
-
-    }
+	public ConsoleRunner(StanzaRecordRepository stanzaRecordRepository, SessionFlowService sessionFlow, ConfigService configService) {  
+	    this.sessionFlow = sessionFlow;
+	    this.configService = configService;
+		this.stanzaRecordRepository = stanzaRecordRepository;  
+	}
+	
 	 public void run() {
 	        Scanner scanner = new Scanner(System.in);
 	        String message = "";
@@ -43,10 +49,20 @@ public class ConsoleRunner {
 	                break;
 	            }
 	            
+	            if (userInput.equalsIgnoreCase("show persona")) {
+	                // Get persona from config service and display it
+	                System.out.println("\n" + configService.getUserPersona());
+	                continue;
+	            }
+	            if (userInput.equalsIgnoreCase("list stanzas")) {
+	                listStanzas();
+	                continue;
+	            }
+
 	            if (userInput.isEmpty()) {
 	                continue;
 	            }
-	            
+  
 	            message = sessionFlow.handleUserInput(userInput,state);
 	            System.out.println(message);
 	            
@@ -54,4 +70,25 @@ public class ConsoleRunner {
 
 	        scanner.close();
 	    }
+
+	 private void listStanzas() {
+		    List<StanzaRecord> stanzas = stanzaRecordRepository.findAll();
+		    
+		    if (stanzas.isEmpty()) {
+		        System.out.println("\n[System] No stanzas saved yet.\n");
+		        return;
+		    }
+		    
+		    System.out.println("\n=== SAVED STANZAS ===\n");
+		    
+		    for (StanzaRecord stanza : stanzas) {
+		        System.out.println("ID: " + stanza.getId());
+		        System.out.println("Setting: " + stanza.getSetting());
+		        System.out.println("Premise: " + stanza.getPremise());
+		        System.out.println("Created: " + stanza.getCreatedAt());
+		        System.out.println("\nQuick Synopsis:");
+		        System.out.println(stanza.getQuickSynopsis());
+		        System.out.println("\n---\n");
+		    }
+		}
  }

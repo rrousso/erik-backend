@@ -7,9 +7,13 @@ import org.springframework.stereotype.Service;
 import com.github.rrousso.erik_core.entities.CompletedStanza;
 import com.github.rrousso.erik_core.entities.Flag;
 import com.github.rrousso.erik_core.entities.ModelType;
+import com.github.rrousso.erik_core.entities.Persona;
 import com.github.rrousso.erik_core.entities.SessionState;
+import com.github.rrousso.erik_core.entities.StanzaRecord;
 import com.github.rrousso.erik_core.entities.StanzaSetup;
 import com.github.rrousso.erik_core.entities.StanzaStatus;
+import com.github.rrousso.erik_core.repositories.PersonaRepository;
+import com.github.rrousso.erik_core.repositories.StanzaRecordRepository;
 
 import java.util.Objects;
 
@@ -27,6 +31,8 @@ public class SessionFlowService {
     private final StanzaExtractorService stanzaExtractor;
     private final SynopsisGeneratorService synopsisGenerator;
     private final FlagDetectorService flagDetector;
+    private final PersonaRepository personaRepository;
+    private final StanzaRecordRepository stanzaRecordRepository;
     private String message = "no message";
     
     public SessionFlowService(
@@ -34,12 +40,16 @@ public class SessionFlowService {
             SystemPromptBuilderService promptBuilder,
             StanzaExtractorService stanzaExtractor,
             SynopsisGeneratorService synopsisGenerator, 
-            FlagDetectorService flagDetector) {
+            FlagDetectorService flagDetector,
+            PersonaRepository personaRepository, 
+            StanzaRecordRepository stanzaRecordRepository) {
         this.llmClient = llmClient;
         this.promptBuilder = promptBuilder;
         this.stanzaExtractor = stanzaExtractor;
         this.synopsisGenerator = synopsisGenerator;
         this.flagDetector = flagDetector;
+		this.personaRepository = personaRepository;
+		this.stanzaRecordRepository = stanzaRecordRepository;
         
         log.info("SessionFlowService initialized");
     }
@@ -279,6 +289,8 @@ public class SessionFlowService {
             state.setCompletedStanza(completed);
             state.setStanzaStatus(StanzaStatus.COMPLETED);
             
+            saveStanzaToDb(completed,state.getCurrentStanza());
+            
             builder.append("\n\n[STANZA END]\n");
             builder.append("\n[System] Here's the quick synopsis:\n");
             builder.append(completed.getQuickSynopsis());
@@ -305,7 +317,26 @@ public class SessionFlowService {
         }
     }
     
-    private void abandonStanza(SessionState state, String userInput) {
+    private void saveStanzaToDb(CompletedStanza completed, StanzaSetup stanzaSetup) {
+    	try {
+			Persona personaEntity = personaRepository.findAll().get(0);
+			
+			StanzaRecord stanzaRecordEntity = new StanzaRecord(personaEntity, completed.getQuickSynopsis(), completed.getDetailedSynopsis() );
+			stanzaRecordEntity.setPremise(stanzaSetup.getPremise());
+			stanzaRecordEntity.setSetting(stanzaSetup.getSetting());
+			stanzaRecordEntity.setTone(stanzaSetup.getTone());
+			stanzaRecordEntity.setUserRole(stanzaSetup.getUserRole());
+			stanzaRecordEntity.setCharacters(stanzaSetup.getCharacters());
+			stanzaRecordEntity.setSpecialRules(stanzaSetup.getSpecialRules());
+			stanzaRecordRepository.save(stanzaRecordEntity);
+			
+			log.info("Stanza saved to database successfully");
+		} catch (Exception e) {
+			log.error("Failed to save stanza to database", e);
+		}	
+	}
+
+	private void abandonStanza(SessionState state, String userInput) {
         if (state.isInVoidMode()) {
         	message = "[System] No active stanza to abandon.\n";
             log.warn("Attempt to abandon stanza while in void mode");
