@@ -1,14 +1,15 @@
 package com.github.rrousso.erik_core.services;
 
-import com.github.rrousso.erik_core.Entities.Flag;
-import com.github.rrousso.erik_core.Entities.ModelType;
-import com.github.rrousso.erik_core.Entities.StanzaStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
+import com.github.rrousso.erik_core.entities.Flag;
+import com.github.rrousso.erik_core.entities.ModelType;
+import com.github.rrousso.erik_core.entities.StanzaStatus;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;

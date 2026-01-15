@@ -1,10 +1,10 @@
 package com.github.rrousso.erik_core.services;
 
-import com.github.rrousso.erik_core.Entities.SessionState;
-import com.github.rrousso.erik_core.Entities.StanzaSetup;
-import com.github.rrousso.erik_core.Entities.StanzaStatus;
-
 import org.springframework.stereotype.Service;
+
+import com.github.rrousso.erik_core.entities.SessionState;
+import com.github.rrousso.erik_core.entities.StanzaSetup;
+import com.github.rrousso.erik_core.entities.StanzaStatus;
 
 import jakarta.annotation.PostConstruct;
 

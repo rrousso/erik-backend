@@ -1,6 +1,6 @@
 package com.github.rrousso.erik_core.controllers;
 
-import com.github.rrousso.erik_core.Entities.SessionState;
+import com.github.rrousso.erik_core.entities.SessionState;
 import com.github.rrousso.erik_core.services.SessionFlowService;
 import org.springframework.stereotype.Component;
 

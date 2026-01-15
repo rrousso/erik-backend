@@ -1,4 +1,4 @@
-package com.github.rrousso.erik_core.Entities;
+package com.github.rrousso.erik_core.entities;
 
 /**
  * Enum representing different types of LLM models used in the system.

@@ -1,4 +1,4 @@
-package com.github.rrousso.erik_core.Entities;
+package com.github.rrousso.erik_core.entities;
 
 
 /**

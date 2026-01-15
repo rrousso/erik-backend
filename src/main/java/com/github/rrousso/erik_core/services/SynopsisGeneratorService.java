@@ -1,9 +1,10 @@
 package com.github.rrousso.erik_core.services;
 
-import com.github.rrousso.erik_core.Entities.ConversationHistory;
-import com.github.rrousso.erik_core.Entities.ModelType;
-
 import org.springframework.stereotype.Service;
+
+import com.github.rrousso.erik_core.entities.ConversationHistory;
+import com.github.rrousso.erik_core.entities.ModelType;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.List;

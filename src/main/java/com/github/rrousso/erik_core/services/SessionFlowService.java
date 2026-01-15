@@ -4,12 +4,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import com.github.rrousso.erik_core.Entities.CompletedStanza;
-import com.github.rrousso.erik_core.Entities.Flag;
-import com.github.rrousso.erik_core.Entities.ModelType;
-import com.github.rrousso.erik_core.Entities.SessionState;
-import com.github.rrousso.erik_core.Entities.StanzaSetup;
-import com.github.rrousso.erik_core.Entities.StanzaStatus;
+import com.github.rrousso.erik_core.entities.CompletedStanza;
+import com.github.rrousso.erik_core.entities.Flag;
+import com.github.rrousso.erik_core.entities.ModelType;
+import com.github.rrousso.erik_core.entities.SessionState;
+import com.github.rrousso.erik_core.entities.StanzaSetup;
+import com.github.rrousso.erik_core.entities.StanzaStatus;
 
 import java.util.Objects;
 
@@ -30,7 +30,6 @@ public class SessionFlowService {
     private String message = "no message";
     
     public SessionFlowService(
-    		ConfigService configService,
             LLMClientService llmClient,
             SystemPromptBuilderService promptBuilder,
             StanzaExtractorService stanzaExtractor,
@@ -114,7 +113,7 @@ public class SessionFlowService {
 
     void handleVoid(String userInput, SessionState state) {
         try {
-            message = "\n[Narration] " + callErik(state, userInput);
+            message = "\n[Erik] " + callErik(state, userInput);
             
         } catch (Exception e) {
             log.error("Error in void mode", e);
@@ -168,7 +167,7 @@ public class SessionFlowService {
         	
         	state.setStanzaStatus(StanzaStatus.ACTIVE);
 	        String erikResponse = callErik(state, userInput);
-	        builder.append(erikResponse);
+	        builder.append("\n[Erik] " + erikResponse);
 	        builder.append("\n\n");
 	        
 	        log.debug("Extracting stanza details...");
@@ -285,7 +284,6 @@ public class SessionFlowService {
             builder.append(completed.getQuickSynopsis());
             builder.append("\n");
             
-            // OPTIONAL: Add Erik's reflection
             try {
                 String erikReflection = callErik(state, 
                     "That was a meaningful stanza to experience together.");

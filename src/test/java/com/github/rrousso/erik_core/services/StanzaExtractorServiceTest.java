@@ -13,9 +13,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.github.rrousso.erik_core.Entities.ConversationHistory;
-import com.github.rrousso.erik_core.Entities.ModelType;
-import com.github.rrousso.erik_core.Entities.StanzaSetup;
+import com.github.rrousso.erik_core.entities.ConversationHistory;
+import com.github.rrousso.erik_core.entities.ModelType;
+import com.github.rrousso.erik_core.entities.StanzaSetup;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Stanza Extractor Service Tests")

@@ -1,4 +1,4 @@
-package com.github.rrousso.erik_core.Entities;
+package com.github.rrousso.erik_core.entities;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -142,7 +142,7 @@ public class ConversationHistory {
      */
     public List<Message> getExchangesForSynopsis(int windowSize) {
         int historySize = currentHistory.size();
-        int keepCount = windowSize * 2;  // We keep this many recent messages
+        int keepCount = windowSize;  // We keep this many recent messages
         
         // Calculate how many OLD messages exist (beyond the keep window)
         int oldMessagesCount = historySize - keepCount;
@@ -166,12 +166,6 @@ public class ConversationHistory {
      */
     public List<Message> getConversationForExtraction() {
         return new ArrayList<>(currentHistory);
-    }
-    
-    public void clear() {
-        fullHistory.clear();
-        currentHistory.clear();
-        synopsis = "";
     }
 
 	public void clearHistory() {

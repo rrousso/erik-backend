@@ -1,12 +1,12 @@
 package com.github.rrousso.erik_core.services;
 
-import com.github.rrousso.erik_core.Entities.Flag;
-import com.github.rrousso.erik_core.Entities.ModelType;
-import com.github.rrousso.erik_core.Entities.StanzaStatus;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+
+import com.github.rrousso.erik_core.entities.Flag;
+import com.github.rrousso.erik_core.entities.ModelType;
+import com.github.rrousso.erik_core.entities.StanzaStatus;
 
 import java.util.Objects;
 
