@@ -6,13 +6,16 @@ import java.util.List;
 /**
  * Pure data class holding all the details for a Stanza.
  * Parsing logic is handled by StanzaExtractorService.
+ * 
+ * ENHANCED: Now separates public role (visible to characters) from private backstory (narrator-only)
  */
 public class StanzaSetup {
     
     private List<String> characters = new ArrayList<>();
     private String setting = "";
     private String premise = "";
-    private String userRole = "";
+    private String userRole = "";  // PUBLIC - what characters can observe
+    private String userBackstory = "";  // PRIVATE - narrator-only, characters don't know
     private String tone = "";
     private List<String> specialRules = new ArrayList<>();
     
@@ -32,6 +35,10 @@ public class StanzaSetup {
     
     public String getUserRole() {
         return userRole;
+    }
+    
+    public String getUserBackstory() {
+        return userBackstory;
     }
     
     public String getTone() {
@@ -60,6 +67,10 @@ public class StanzaSetup {
         this.userRole = userRole;
     }
     
+    public void setUserBackstory(String userBackstory) {
+        this.userBackstory = userBackstory;
+    }
+    
     public void setTone(String tone) {
         this.tone = tone;
     }
@@ -72,11 +83,16 @@ public class StanzaSetup {
     
     /**
      * Convert to a narrative-friendly string for the narrator system prompt
+     * 
+     * ENHANCED: Now includes BOTH public context (for characters) and private context (narrator-only)
      */
     public String toNarratorContext() {
         StringBuilder sb = new StringBuilder();
         
         sb.append("CURRENT STANZA SETUP:\n\n");
+        
+        // PUBLIC INFORMATION - Characters can observe/infer this
+        sb.append("=== PUBLIC CONTEXT (characters can know this) ===\n\n");
         
         if (!setting.isEmpty()) {
             sb.append("Setting: ").append(setting).append("\n\n");
@@ -87,7 +103,7 @@ public class StanzaSetup {
         }
         
         if (!userRole.isEmpty()) {
-            sb.append("User's Role: ").append(userRole).append("\n\n");
+            sb.append("User's Observable Role: ").append(userRole).append("\n\n");
         }
         
         if (!characters.isEmpty()) {
@@ -110,6 +126,16 @@ public class StanzaSetup {
             sb.append("\n");
         }
         
+        // PRIVATE INFORMATION - Only narrator knows, characters don't
+        if (!userBackstory.isEmpty()) {
+            sb.append("=== PRIVATE CONTEXT (NARRATOR-ONLY - characters do NOT know this) ===\n\n");
+            sb.append("User's Backstory (hidden from characters):\n");
+            sb.append(userBackstory).append("\n\n");
+            sb.append("CRITICAL: This information is PRIVATE. Characters cannot know, sense, or infer this ");
+            sb.append("unless the user explicitly reveals it in dialogue or actions. ");
+            sb.append("Characters are NOT psychic. They can only know what they observe or are told.\n\n");
+        }
+        
         return sb.toString();
     }
     
@@ -120,7 +146,8 @@ public class StanzaSetup {
         System.out.println("\n[DEBUG] StanzaSetup:");
         System.out.println("  Setting: " + setting);
         System.out.println("  Premise: " + premise);
-        System.out.println("  User Role: " + userRole);
+        System.out.println("  User Role (PUBLIC): " + userRole);
+        System.out.println("  User Backstory (PRIVATE): " + userBackstory);
         System.out.println("  Tone: " + tone);
         System.out.println("  Characters: " + characters);
         System.out.println("  Special Rules: " + specialRules);

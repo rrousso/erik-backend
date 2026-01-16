@@ -59,15 +59,36 @@ public class SystemPromptBuilderService {
     }
     
     public String buildWorldSnapshotPrompt() {
-        return worldSnapshotSynopsis;
+        StringBuilder prompt = new StringBuilder();
+        
+        prompt.append(configService.getUserPersona());
+        prompt.append("\n\n---\n\n");
+        
+        prompt.append(worldSnapshotSynopsis);
+        
+        return prompt.toString();
     }
     
     public String buildQuickSynopsisPrompt() {
-        return quickSynopsisExtractionPrompt;
+        StringBuilder prompt = new StringBuilder();
+        
+        prompt.append(configService.getUserPersona());
+        prompt.append("\n\n---\n\n");
+        
+        prompt.append(quickSynopsisExtractionPrompt);
+        
+        return prompt.toString();
     }
     
     public String buildDetailedSynopsisPrompt() {
-        return detailedSynopsisExtractionPrompt;
+        StringBuilder prompt = new StringBuilder();
+        
+        prompt.append(configService.getUserPersona());
+        prompt.append("\n\n---\n\n");
+        
+        prompt.append(detailedSynopsisExtractionPrompt);
+        
+        return prompt.toString();
     }
     
     public String buildChangeDistillerPrompt() {

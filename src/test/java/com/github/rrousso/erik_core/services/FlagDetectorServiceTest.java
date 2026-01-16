@@ -9,6 +9,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.github.rrousso.erik_core.entities.Flag;
 import com.github.rrousso.erik_core.entities.ModelType;
+import com.github.rrousso.erik_core.entities.SessionState;
 import com.github.rrousso.erik_core.entities.StanzaStatus;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -30,46 +31,70 @@ public class FlagDetectorServiceTest {
     @BeforeEach
     void setUp() {
         flagDetector = new FlagDetectorService(llmClient, promptBuilder);
+        
+        lenient().when(promptBuilder.buildFlagDetectionPrompt())
+        .thenReturn("Mock prompt with {CONVERSATION_CONTEXT} placeholder");
     }
     
     @Test
-    @DisplayName("Should detect START flag when user says 'let's begin' in NONE status")
-    void shouldDetectStartFlag() throws Exception {
-    	
-        String userInput = "let's begin";
-        StanzaStatus status = StanzaStatus.NONE;
+    @DisplayName("Should return NONE when user describes WHERE to start (without Erik prompting)")
+    void shouldReturnNoneWhenDescribingStartLocation() throws Exception {
+        SessionState state = new SessionState();
+        state.setStanzaStatus(StanzaStatus.NONE);
         
-        when(promptBuilder.buildFlagDetectionPrompt())
-            .thenReturn("Mock prompt template");
+        state.getVoidHistory().addAssistantMessage("What setting do you want?");
         
-        when(llmClient.call(
+        String userInput = "I want to start at the dance scene";
+        
+        when(llmClient.call(eq(ModelType.ANALYTICAL), anyString(), anyString()))
+            .thenReturn("NONE");
+        
+        Flag result = flagDetector.detect(userInput, state);
+        
+        assertEquals(Flag.NONE, result);
+        
+        verify(llmClient).call(
             eq(ModelType.ANALYTICAL),
             anyString(),
-            anyString()
-        )).thenReturn("START");
+            contains("What setting do you want?")
+        );
+    }
+    
+    @Test
+    @DisplayName("Should return START when user confirms after Erik asks 'Ready?'")
+    void shouldReturnStartWhenConfirmingAfterReadyPrompt() throws Exception {
+        SessionState state = new SessionState();
+        state.setStanzaStatus(StanzaStatus.NONE);
         
-        Flag result = flagDetector.detect(userInput, status);
+        state.getVoidHistory().addAssistantMessage("Perfect setup! Ready to begin?");
+        
+        String userInput = "yeah";
+        
+        when(llmClient.call(eq(ModelType.ANALYTICAL), anyString(), anyString()))
+            .thenReturn("START");
+        
+        Flag result = flagDetector.detect(userInput, state);
         
         assertEquals(Flag.START_STANZA, result);
-        
-        verify(llmClient, times(1)).call(
+
+        verify(llmClient).call(
             eq(ModelType.ANALYTICAL),
             anyString(),
-            anyString()
+            contains("Ready to begin?")
         );
     }
     
     @Test
     @DisplayName("Should return NONE for empty input")
     void shouldReturnNoneForEmptyInput() {
-
+        SessionState state = new SessionState();
+        state.setStanzaStatus(StanzaStatus.ACTIVE);
+        
         String userInput = "   ";
-        StanzaStatus status = StanzaStatus.ACTIVE;    
         
-        Flag result = flagDetector.detect(userInput, status);
-
+        Flag result = flagDetector.detect(userInput, state);
+        
         assertEquals(Flag.NONE, result);
-        
         verifyNoInteractions(llmClient);
     }
     
@@ -78,10 +103,9 @@ public class FlagDetectorServiceTest {
     void shouldReturnNoneForNormalInput() throws Exception {
 
         String userInput = "I follow the fox";
-        StanzaStatus status = StanzaStatus.ACTIVE;    
+        SessionState state = new SessionState();
+        state.setStanzaStatus(StanzaStatus.ACTIVE);  
         
-        when(promptBuilder.buildFlagDetectionPrompt())
-        .thenReturn("Mock prompt template");
     
 	    when(llmClient.call(
 	        eq(ModelType.ANALYTICAL),
@@ -90,7 +114,7 @@ public class FlagDetectorServiceTest {
 	    )).thenReturn("NONE");
     
         
-        Flag result = flagDetector.detect(userInput, status);
+        Flag result = flagDetector.detect(userInput, state);
 
         assertEquals(Flag.NONE, result);
         
@@ -106,10 +130,9 @@ public class FlagDetectorServiceTest {
     void shouldDetectPauseFlag() throws Exception {
 
         String userInput = "((Pause))";
-        StanzaStatus status = StanzaStatus.ACTIVE;
+        SessionState state = new SessionState();
+        state.setStanzaStatus(StanzaStatus.ACTIVE);
         
-        when(promptBuilder.buildFlagDetectionPrompt())
-            .thenReturn("Mock prompt template");
 
         when(llmClient.call(
             eq(ModelType.ANALYTICAL),
@@ -117,7 +140,7 @@ public class FlagDetectorServiceTest {
             anyString()
         )).thenReturn("PAUSE");
         
-        Flag result = flagDetector.detect(userInput, status);
+        Flag result = flagDetector.detect(userInput, state);
         
         assertEquals(Flag.PAUSE_STANZA, result);       
 
@@ -133,10 +156,9 @@ public class FlagDetectorServiceTest {
     void shouldDetectContinueFlag() throws Exception {
 
         String userInput = "Sounds good Erik, let's continue!";
-        StanzaStatus status = StanzaStatus.PAUSED;
+        SessionState state = new SessionState();
+        state.setStanzaStatus(StanzaStatus.PAUSED);
         
-        when(promptBuilder.buildFlagDetectionPrompt())
-            .thenReturn("Mock prompt template");
 
         when(llmClient.call(
             eq(ModelType.ANALYTICAL),
@@ -144,7 +166,7 @@ public class FlagDetectorServiceTest {
             anyString()
         )).thenReturn("CONTINUE");
         
-        Flag result = flagDetector.detect(userInput, status);
+        Flag result = flagDetector.detect(userInput, state);
         
         assertEquals(Flag.CONTINUE_STANZA, result);       
 
@@ -160,10 +182,9 @@ public class FlagDetectorServiceTest {
     void shouldDetectEndFlag() throws Exception {
 
         String userInput = "((End Stanza))";
-        StanzaStatus status = StanzaStatus.ACTIVE;
+        SessionState state = new SessionState();
+        state.setStanzaStatus(StanzaStatus.ACTIVE);
         
-        when(promptBuilder.buildFlagDetectionPrompt())
-            .thenReturn("Mock prompt template");
 
         when(llmClient.call(
             eq(ModelType.ANALYTICAL),
@@ -171,7 +192,7 @@ public class FlagDetectorServiceTest {
             anyString()
         )).thenReturn("END");
         
-        Flag result = flagDetector.detect(userInput, status);
+        Flag result = flagDetector.detect(userInput, state);
         
         assertEquals(Flag.END_STANZA, result);       
 
@@ -187,10 +208,9 @@ public class FlagDetectorServiceTest {
     void shouldDetectAbandonFlag() throws Exception {
 
         String userInput = "((Abandon Stanza))";
-        StanzaStatus status = StanzaStatus.ACTIVE;
+        SessionState state = new SessionState();
+        state.setStanzaStatus(StanzaStatus.ACTIVE);
         
-        when(promptBuilder.buildFlagDetectionPrompt())
-            .thenReturn("Mock prompt template");
 
         when(llmClient.call(
             eq(ModelType.ANALYTICAL),
@@ -198,7 +218,7 @@ public class FlagDetectorServiceTest {
             anyString()
         )).thenReturn("ABANDON");
         
-        Flag result = flagDetector.detect(userInput, status);
+        Flag result = flagDetector.detect(userInput, state);
         
         assertEquals(Flag.ABANDON_STANZA, result);       
 
@@ -214,10 +234,9 @@ public class FlagDetectorServiceTest {
     void shouldDetectInvalidEndFlag() throws Exception {
 
         String userInput = "I'm not sure how to end this, Erik";
-        StanzaStatus status = StanzaStatus.PAUSED;
+        SessionState state = new SessionState();
+        state.setStanzaStatus(StanzaStatus.PAUSED);
         
-        when(promptBuilder.buildFlagDetectionPrompt())
-            .thenReturn("Mock prompt template");
 
         when(llmClient.call(
             eq(ModelType.ANALYTICAL),
@@ -225,7 +244,7 @@ public class FlagDetectorServiceTest {
             anyString()
         )).thenReturn("END");
         
-        Flag result = flagDetector.detect(userInput, status);
+        Flag result = flagDetector.detect(userInput, state);
         
         assertEquals(Flag.NONE, result);       
 
@@ -241,10 +260,9 @@ public class FlagDetectorServiceTest {
     void shouldDetectInvalidStartFlag() throws Exception {
 
         String userInput = "I start building a sand castle";
-        StanzaStatus status = StanzaStatus.ACTIVE;
+        SessionState state = new SessionState();
+        state.setStanzaStatus(StanzaStatus.ACTIVE);
         
-        when(promptBuilder.buildFlagDetectionPrompt())
-            .thenReturn("Mock prompt template");
 
         when(llmClient.call(
             eq(ModelType.ANALYTICAL),
@@ -252,7 +270,7 @@ public class FlagDetectorServiceTest {
             anyString()
         )).thenReturn("START");
         
-        Flag result = flagDetector.detect(userInput, status);
+        Flag result = flagDetector.detect(userInput, state);
         
         assertEquals(Flag.NONE, result);       
 
@@ -268,10 +286,9 @@ public class FlagDetectorServiceTest {
     void shouldDetectInvalidAbandonFlag() throws Exception {
 
         String userInput = "I should abandon this kind of stanza";
-        StanzaStatus status = StanzaStatus.NONE;
+        SessionState state = new SessionState();
+        state.setStanzaStatus(StanzaStatus.NONE);
         
-        when(promptBuilder.buildFlagDetectionPrompt())
-            .thenReturn("Mock prompt template");
 
         when(llmClient.call(
             eq(ModelType.ANALYTICAL),
@@ -279,7 +296,7 @@ public class FlagDetectorServiceTest {
             anyString()
         )).thenReturn("ABANDON");
         
-        Flag result = flagDetector.detect(userInput, status);
+        Flag result = flagDetector.detect(userInput, state);
         
         assertEquals(Flag.NONE, result);       
 
@@ -295,10 +312,9 @@ public class FlagDetectorServiceTest {
     void shouldDetectInvalidPauseFlag() throws Exception {
 
         String userInput = "I just want to stop thinking about it";
-        StanzaStatus status = StanzaStatus.ABANDONED;
+        SessionState state = new SessionState();
+        state.setStanzaStatus(StanzaStatus.ABANDONED);
         
-        when(promptBuilder.buildFlagDetectionPrompt())
-            .thenReturn("Mock prompt template");
 
         when(llmClient.call(
             eq(ModelType.ANALYTICAL),
@@ -306,7 +322,7 @@ public class FlagDetectorServiceTest {
             anyString()
         )).thenReturn("PAUSE");
         
-        Flag result = flagDetector.detect(userInput, status);
+        Flag result = flagDetector.detect(userInput, state);
         
         assertEquals(Flag.NONE, result);       
 
@@ -322,18 +338,16 @@ public class FlagDetectorServiceTest {
     void shouldDetectInvalidStartFlagWhileCompleted() throws Exception {
 
         String userInput = "Let's start a new Stanza!";
-        StanzaStatus status = StanzaStatus.COMPLETED;
+        SessionState state = new SessionState();
+        state.setStanzaStatus(StanzaStatus.COMPLETED);
         
-        when(promptBuilder.buildFlagDetectionPrompt())
-            .thenReturn("Mock prompt template");
-
         when(llmClient.call(
             eq(ModelType.ANALYTICAL),
             anyString(),
             anyString()
         )).thenReturn("START");
         
-        Flag result = flagDetector.detect(userInput, status);
+        Flag result = flagDetector.detect(userInput, state);
         
         assertEquals(Flag.NONE, result);       
 
@@ -348,13 +362,13 @@ public class FlagDetectorServiceTest {
     @DisplayName("Should handle LLM error gracefully")
     void shouldHandleLlmError() throws Exception {
     	
-    	when(promptBuilder.buildFlagDetectionPrompt())
-        .thenReturn("Mock prompt template");
+        SessionState state = new SessionState();
+        state.setStanzaStatus(StanzaStatus.ACTIVE);
     	
         when(llmClient.call(eq(ModelType.ANALYTICAL), any(), any()))
             .thenThrow(new RuntimeException("API Error"));
         
-        Flag result = flagDetector.detect("pause", StanzaStatus.ACTIVE);
+        Flag result = flagDetector.detect("pause", state);
         
         assertEquals(Flag.NONE, result); // Should return NONE on error
     }
@@ -362,11 +376,11 @@ public class FlagDetectorServiceTest {
     @Test
     @DisplayName("Should throw NullPointerException for null input")
     void shouldThrowExceptionForNullInput() {
-        StanzaStatus status = StanzaStatus.ACTIVE;
+        SessionState state = new SessionState();
         
         // assertThrows verifies an exception is thrown
         assertThrows(NullPointerException.class, () -> {
-            flagDetector.detect(null, status);
+            flagDetector.detect(null, state);
         });
     }
 
@@ -384,10 +398,8 @@ public class FlagDetectorServiceTest {
     @DisplayName("Should return NONE for unrecognized LLM response")
     void shouldReturnNoneForUnrecognizedResponse() throws Exception {
         String userInput = "some input";
-        StanzaStatus status = StanzaStatus.ACTIVE;
-        
-        when(promptBuilder.buildFlagDetectionPrompt())
-            .thenReturn("Mock prompt template");
+        SessionState state = new SessionState();
+        state.setStanzaStatus(StanzaStatus.ACTIVE);
 
         // LLM returns complete garbage
         when(llmClient.call(
@@ -396,7 +408,7 @@ public class FlagDetectorServiceTest {
             anyString()
         )).thenReturn("GARBAGE_XYZ_NOT_A_FLAG");
         
-        Flag result = flagDetector.detect(userInput, status);
+        Flag result = flagDetector.detect(userInput, state);
         
         assertEquals(Flag.NONE, result);
     }

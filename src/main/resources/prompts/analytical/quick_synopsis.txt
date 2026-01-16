@@ -2,18 +2,22 @@
 
 You are creating a brief narrative summary of a completed stanza (story segment).
 
-## GOAL
-Create a concise, engaging summary in approximately 150 words that captures:
-- The main events that occurred
-- Key character moments
-- The emotional arc
-- How it concluded
+## CRITICAL INSTRUCTION
+The PREVIOUS SNAPSHOT contains an **EVENT HISTORY** section that chronicles everything that happened from the START of the stanza.
+
+You MUST:
+1. Start your summary from the BEGINNING (using EVENT HISTORY)
+2. Include the full narrative arc, not just recent events
+3. Weave in the most recent exchanges as the conclusion
+4. Create a cohesive story that flows from start to finish
+
+DO NOT just summarize the recent conversation. Use EVENT HISTORY as your foundation.
 
 ## STYLE
 - Write in past tense, third person
 - Focus on narrative flow, not dry facts
-- Make it feel like a story recap
-- Keep it brief but compelling
+- Make it feel like a complete story recap from beginning to end
+- Keep it brief but compelling (approximately 150 words)
 
 ---
 
@@ -28,6 +32,8 @@ ${conversationText}
 ---
 
 ## YOUR TASK
-Based on the previous snapshot and the conversation above, create a brief narrative summary (approximately 150 words) that captures what happened in this stanza.
+Based on the **EVENT HISTORY** in the previous snapshot (which contains the full story) and the recent conversation above (which shows how it ended), create a brief narrative summary (approximately 150 words) that captures the ENTIRE stanza from beginning to end.
+
+Start from the beginning of the story, not from recent events.
 
 Write the summary now:

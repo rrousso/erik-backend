@@ -15,6 +15,8 @@ import com.github.rrousso.erik_core.entities.StanzaStatus;
 import com.github.rrousso.erik_core.repositories.PersonaRepository;
 import com.github.rrousso.erik_core.repositories.StanzaRecordRepository;
 
+import jakarta.transaction.Transactional;
+
 import java.util.Objects;
 
 /**
@@ -67,7 +69,7 @@ public class SessionFlowService {
         }
         
     	// First: Detect if this is a command using analytical model
-        Flag flag = flagDetector.detect(userInput, state.getStanzaStatus());
+        Flag flag = flagDetector.detect(userInput, state);
         
         log.debug("Flag detection result: {}", flag);
         
@@ -317,6 +319,7 @@ public class SessionFlowService {
         }
     }
     
+    @Transactional
     private void saveStanzaToDb(CompletedStanza completed, StanzaSetup stanzaSetup) {
     	try {
 			Persona personaEntity = personaRepository.findAll().get(0);
@@ -326,6 +329,7 @@ public class SessionFlowService {
 			stanzaRecordEntity.setSetting(stanzaSetup.getSetting());
 			stanzaRecordEntity.setTone(stanzaSetup.getTone());
 			stanzaRecordEntity.setUserRole(stanzaSetup.getUserRole());
+			stanzaRecordEntity.setUserBackstory(stanzaSetup.getUserBackstory());
 			stanzaRecordEntity.setCharacters(stanzaSetup.getCharacters());
 			stanzaRecordEntity.setSpecialRules(stanzaSetup.getSpecialRules());
 			stanzaRecordRepository.save(stanzaRecordEntity);

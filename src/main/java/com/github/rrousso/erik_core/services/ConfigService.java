@@ -167,8 +167,14 @@ public class ConfigService {
         
         if (persona.getOtherDetails() != null && !persona.getOtherDetails().isEmpty()) {
             sb.append("- Additional details: ").append(persona.getOtherDetails()).append("\n");
-        }
+        } 
         
+        sb.append("\n**CRITICAL PRONOUN USAGE:**\n");
+        sb.append("The user's pronouns are: ").append(persona.getPronouns().isEmpty() ? "not specified" : persona.getPronouns()).append("\n");
+        sb.append("ALL references to the user MUST use these pronouns.\n");
+        sb.append("Characters in scenes MUST use these pronouns when referring to or addressing the user.\n");
+        sb.append("Do NOT use 'they' unless the user's pronouns are specifically they/them.\n");
+        sb.append("Do NOT default to neutral pronouns - use the specified pronouns.\n");
         sb.append("\nThis is the baseline for all scenes and dialogue.\n");
         sb.append("Characters will interact with the user according to these details.\n");
         

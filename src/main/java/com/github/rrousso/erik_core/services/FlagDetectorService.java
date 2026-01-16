@@ -4,15 +4,22 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import com.github.rrousso.erik_core.entities.ConversationHistory;
 import com.github.rrousso.erik_core.entities.Flag;
 import com.github.rrousso.erik_core.entities.ModelType;
+import com.github.rrousso.erik_core.entities.SessionState;
 import com.github.rrousso.erik_core.entities.StanzaStatus;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
  * Service for detecting system flags from user input using a lightweight analytical model.
  * This pre-filter determines if the user is issuing a command before calling the main narrative models.
+ * 
+ * Uses conversation context (Erik's last message) to distinguish between:
+ * - Descriptive "start": "I want to start at the dance scene" (describing WHERE to begin)
+ * - Command "start": "yeah" after Erik asks "Ready to begin?" (confirming to start)
  */
 @Service
 public class FlagDetectorService {
@@ -30,12 +37,12 @@ public class FlagDetectorService {
     }
     
     /**
-     * Detect flag from user input based on current stanza status
+     * Detect flag from user input with conversation context
      */
-    public Flag detect(String userInput, StanzaStatus currentStatus) {
+    public Flag detect(String userInput, SessionState state) {
         // Input validation
         Objects.requireNonNull(userInput, "userInput cannot be null");
-        Objects.requireNonNull(currentStatus, "currentStatus cannot be null");
+        Objects.requireNonNull(state, "state cannot be null");
         
         if (userInput.isBlank()) {
             log.warn("Empty user input provided to flag detector");
@@ -43,14 +50,19 @@ public class FlagDetectorService {
         }
         
         try {
-            String prompt = buildFlagDetectionPrompt(userInput, currentStatus);
+            StanzaStatus currentStatus = state.getStanzaStatus();
+            
+            // Build conversation context from state
+            String conversationContext = buildConversationContext(state);
+            
+            String prompt = buildFlagDetectionPrompt(userInput, currentStatus, conversationContext);
             String response = llmClient.call(ModelType.ANALYTICAL, "", prompt);
             
             Flag flag = parseResponse(response.trim(), currentStatus);
             
             // Debug logging
-            log.debug("Flag detection - Input: \"{}\", Status: {}, Response: \"{}\", Flag: {}", 
-                userInput, currentStatus, response.trim(), flag);
+            log.debug("Flag detection - Input: \"{}\", Status: {}, Context: \"{}\", Response: \"{}\", Flag: {}", 
+                userInput, currentStatus, conversationContext, response.trim(), flag);
   
             return flag;
         } catch (Exception e) {
@@ -61,21 +73,58 @@ public class FlagDetectorService {
     }
     
     /**
-     * Build the prompt for flag detection
+     * Build conversation context from SessionState
+     * 
+     * IMPORTANT: Only extracts context for START detection in VOID mode
+     * - In VOID mode: Get Erik's last message to understand if he's prompting for confirmation
+     * - In STANZA mode: No context needed (PAUSE/END/ABANDON don't need conversational cues)
      */
-    private String buildFlagDetectionPrompt(String userInput, StanzaStatus currentStatus) {
+    private String buildConversationContext(SessionState state) {
+        // Only use context for START detection in VOID mode
+        if (!state.isInVoidMode()) {
+            return "";
+        }
+        
+        // Only relevant when detecting START command
+        if (state.getStanzaStatus() != StanzaStatus.NONE && state.getStanzaStatus() != StanzaStatus.ABANDONED) {
+            return "";
+        }
+        
+        // Get Erik's last message from void history
+        ConversationHistory voidHistory = state.getVoidHistory();
+        List<ConversationHistory.Message> messages = voidHistory.getAllMessages();
+        
+        if (messages.isEmpty()) {
+            return "";
+        }
+        
+        // Find the last assistant (Erik) message
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            ConversationHistory.Message msg = messages.get(i);
+            if ("assistant".equals(msg.getRole())) {
+                return msg.getContent();
+            }
+        }
+        
+        return "";
+    }
+    
+    /**
+     * Build the prompt for flag detection with conversation context
+     */
+    private String buildFlagDetectionPrompt(String userInput, StanzaStatus currentStatus, String conversationContext) {
         String template = promptBuilder.buildFlagDetectionPrompt();
         String availableFlags = getAvailableFlags(currentStatus);
         
         return template
             .replace("{STATUS}", currentStatus.name())
             .replace("{AVAILABLE_FLAGS}", availableFlags)
-            .replace("{USER_INPUT}", userInput);
+            .replace("{USER_INPUT}", userInput)
+            .replace("{CONVERSATION_CONTEXT}", conversationContext != null ? conversationContext : "");
     }
     
     /**
      * Get available flags based on current status
-     * IMPORTANT: Keep these simple and clear - just the command names
      */
     private String getAvailableFlags(StanzaStatus currentStatus) {
         return switch (currentStatus) {
@@ -89,14 +138,9 @@ public class FlagDetectorService {
     
     /**
      * Parse the LLM response into a Flag
-     * FIXED: Check for NONE first to avoid "NONE".contains("END") bug!
      */
     private Flag parseResponse(String response, StanzaStatus currentStatus) {
         String cleanResponse = response.toUpperCase().trim();
-        
-        if (cleanResponse.equals("NONE") || cleanResponse.contains("NO COMMAND")) {
-            return Flag.NONE;
-        }
         
         // Now check for actual commands
         Flag flag = Flag.NONE;

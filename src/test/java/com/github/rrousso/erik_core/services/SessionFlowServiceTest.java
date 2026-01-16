@@ -63,7 +63,7 @@ public class SessionFlowServiceTest {
 		
     	when(flagDetector.detect(
     			eq("Hello!"),
-    			eq(state.getStanzaStatus())
+    			eq(state)
     			)).thenReturn(Flag.NONE);
     	
     	when(promptBuilder.buildVoidPrompt(eq(state)))
@@ -86,7 +86,7 @@ public class SessionFlowServiceTest {
 		
     	when(flagDetector.detect(
     			eq("Let's begin!"),
-    			eq(state.getStanzaStatus())
+    			eq(state)
     			)).thenReturn(Flag.START_STANZA);
     	
     	when(promptBuilder.buildVoidPrompt(eq(state)))
@@ -126,7 +126,7 @@ public class SessionFlowServiceTest {
 		
     	when(flagDetector.detect(
     			eq("((Pause, let's do this differently))"),
-    			eq(state.getStanzaStatus())
+    			eq(state)
     			)).thenReturn(Flag.PAUSE_STANZA);
     	
     	when(promptBuilder.buildVoidPrompt(
@@ -158,7 +158,7 @@ public class SessionFlowServiceTest {
 			
     	when(flagDetector.detect(
     			eq("Yeah, let's go back now"),
-    			eq(state.getStanzaStatus())
+    			eq(state)
     			)).thenReturn(Flag.CONTINUE_STANZA);
     	
     	when(promptBuilder.buildStanzaPrompt(
@@ -191,7 +191,7 @@ public class SessionFlowServiceTest {
 		
     	when(flagDetector.detect(
     			eq("((end stanza))"),
-    			eq(state.getStanzaStatus())
+    			eq(state)
     			)).thenReturn(Flag.END_STANZA);
     	
     	when(promptBuilder.buildVoidPrompt(eq(state)))
@@ -235,7 +235,7 @@ public class SessionFlowServiceTest {
 		
     	when(flagDetector.detect(
     			eq("((abandon stanza))"),
-    			eq(state.getStanzaStatus())
+    			eq(state)
     			)).thenReturn(Flag.ABANDON_STANZA);
     	
     	when(promptBuilder.buildVoidPrompt(eq(state)))
@@ -262,7 +262,7 @@ public class SessionFlowServiceTest {
 		
     	when(flagDetector.detect(
     			eq("Let's start a new stanza!"),
-    			eq(state.getStanzaStatus())
+    			eq(state)
     			)).thenReturn(Flag.START_STANZA);
     	
         String message = sessionFlowService.handleUserInput("Let's start a new stanza!", state);
@@ -277,7 +277,7 @@ public class SessionFlowServiceTest {
 	void shouldHandleLlmExceptionsGracefullyDuringInputProcessing() throws Exception{
     	when(flagDetector.detect(
     			eq("Hello!"),
-    			eq(state.getStanzaStatus())
+    			eq(state)
     			)).thenReturn(Flag.NONE);
     	
     	when(promptBuilder.buildVoidPrompt(eq(state)))

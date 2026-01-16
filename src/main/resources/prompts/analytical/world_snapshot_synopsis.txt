@@ -19,6 +19,34 @@ OOC text is invisible to the story but authoritative for the snapshot.
 Do NOT invent new facts.
 Do NOT merge private knowledge into public knowledge unless it was explicitly shared in-character.
 
+**CRITICAL KNOWLEDGE SEPARATION RULE:**
+
+Information in **CURRENT STATE - USER_ONLY** is PRIVATE.
+Characters can NEVER know this information unless:
+1. The user explicitly shared it in dialogue
+2. An OOC directive specifically states they learned it
+
+When updating **CURRENT STATE - CHARACTERS**, you must track:
+- What they ACTUALLY observed
+- What the user ACTUALLY told them
+- What they could REASONABLY infer from public actions
+
+DO NOT give characters knowledge from USER_ONLY section.
+DO NOT assume characters "sense" or "know" private information.
+Characters are NOT psychic unless explicitly stated.
+
+**EXAMPLE OF CORRECT SEPARATION:**
+
+USER_ONLY: "User is a werewolf hiding their nature"
+CHARACTER: "Knows: User seems nervous around full moons; Believes: User might have a secret"
+[Character does NOT know user is a werewolf unless explicitly told]
+
+**EXAMPLE OF WRONG SEPARATION:**
+
+USER_ONLY: "User is a werewolf hiding their nature"
+CHARACTER: "Knows: User is a werewolf; Believes: User is hiding something"
+[WRONG - character shouldn't know this unless user revealed it]
+
 IMPORTANT COMPRESSION RULE:
 The updated snapshot must be SHORTER in total characters than:
 (PREVIOUS SNAPSHOT + RECENT EXCHANGES).
@@ -48,15 +76,20 @@ Produce an UPDATED WORLD STATE SNAPSHOT in the following format:
 
 **CURRENT STATE - USER_ONLY:**
 - Information only the user knows RIGHT NOW (dashboards, thoughts, private data, meta info)
+- This information is PRIVATE - characters do NOT have access to it
+- Only include what the user knows/feels/thinks that they have NOT shared
 
 **CURRENT STATE - CHARACTERS:**
 For each named character currently present or recently relevant:
-- What they know NOW
-- What they believe NOW
+- What they know NOW (based on what they observed or were told in-character)
+- What they believe NOW (based on reasonable inferences from observations)
 - Their current emotional state toward the user NOW
+- DO NOT include information from USER_ONLY unless explicitly shared
 
 **META:**
 - Active rules, constraints, or OOC-defined conditions currently in effect
+- Character ages, if specified
+- World rules that affect the narrative
 
 Only include information that is currently true after applying all OOC directives and recent events.
 For CURRENT STATE: If something changed, update it — do not keep outdated versions.
@@ -64,3 +97,4 @@ For EVENT HISTORY: Add new significant events, condense older ones to save space
 
 Keep it concise, structured, and minimal.
 Remove anything that is no longer relevant to the ongoing story.
+Maintain strict separation between public knowledge and private USER_ONLY knowledge.

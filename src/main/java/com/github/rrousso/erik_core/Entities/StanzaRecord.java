@@ -38,6 +38,9 @@ public class StanzaRecord {
     @Column(length = 500)
     private String userRole;
     
+    @Column(length = 500)
+    private String userBackstory;
+    
     @Column(length = 200)
     private String tone;
     
@@ -124,6 +127,14 @@ public class StanzaRecord {
 
 	public void setUserRole(String userRole) {
 		this.userRole = userRole;
+	}
+	
+	public String getUserBackStory() {
+		return userBackstory;
+	}
+
+	public void setUserBackstory(String userBackstory) {
+		this.userBackstory = userBackstory;
 	}
 
 	public String getTone() {

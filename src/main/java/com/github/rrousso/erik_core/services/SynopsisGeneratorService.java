@@ -7,11 +7,19 @@ import com.github.rrousso.erik_core.entities.ModelType;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
  * Spring service for generating synopses using template-based prompts.
  * Strips OOC commands and uses synopsis + currentHistory for complete context.
+ * ENHANCED: Now saves synopsis to file for inspection
  */
 @Service
 public class SynopsisGeneratorService {
@@ -21,6 +29,9 @@ public class SynopsisGeneratorService {
     private final LLMClientService llmClient;
     private final SystemPromptBuilderService promptBuilder;
     private final ConfigService configService;
+    
+    // File to save synopsis for debugging
+    private static final String SYNOPSIS_DEBUG_FILE = "user_data/current_synopsis.txt";
     
     public SynopsisGeneratorService(LLMClientService llmClient, SystemPromptBuilderService promptBuilder, ConfigService configService) {
         this.llmClient = llmClient;
@@ -65,7 +76,7 @@ public class SynopsisGeneratorService {
             .replace("${previousSnapshot}", previousSynopsis)
             .replace("${exchangeText}", exchangeText);
 
-        log.info("[System] Generating rolling synopsis using world_snapshot template..." + filledPrompt);
+        log.info("[System] Generating rolling synopsis using world_snapshot template...");
 
         // Use ANALYTICAL model - simple call with filled template as user prompt
         String newSynopsis = llmClient.call(
@@ -77,6 +88,9 @@ public class SynopsisGeneratorService {
         log.info("[Synopsis] Generated new synopsis (" + newSynopsis.length() + " chars)");
 
         history.updateSynopsis(newSynopsis, getWindowSize());
+        
+        // ENHANCEMENT: Save synopsis to file for inspection
+        saveSynopsisToFile(newSynopsis, "rolling");
 
         return newSynopsis;
     }
@@ -110,6 +124,9 @@ public class SynopsisGeneratorService {
         );
 
         log.info("[QuickSynopsis] Generated (" + result.length() + " chars)");
+        
+        // ENHANCEMENT: Save quick synopsis to file
+        saveSynopsisToFile(result, "quick");
 
         return result;
     }
@@ -143,6 +160,9 @@ public class SynopsisGeneratorService {
         );
 
         log.info("[DetailedSynopsis] Generated (" + result.length() + " chars)");
+        
+        // ENHANCEMENT: Save detailed synopsis to file
+        saveSynopsisToFile(result, "detailed");
 
         return result;
     }
@@ -221,5 +241,39 @@ public class SynopsisGeneratorService {
     
     private int getSynopsisThreshold() {
         return configService.getThresholdSize();
+    }
+    
+    /**
+     * ENHANCEMENT: Save synopsis to file for debugging
+     * This allows you to check the synopsis even if console output is truncated
+     */
+    private void saveSynopsisToFile(String synopsis, String type) {
+        try {
+            Path filePath = Paths.get(SYNOPSIS_DEBUG_FILE);
+            
+            // Ensure parent directory exists
+            Files.createDirectories(filePath.getParent());
+            
+            // Create formatted output with timestamp
+            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            StringBuilder output = new StringBuilder();
+            output.append("=".repeat(80)).append("\n");
+            output.append("SYNOPSIS UPDATE - ").append(type.toUpperCase()).append("\n");
+            output.append("Timestamp: ").append(timestamp).append("\n");
+            output.append("=".repeat(80)).append("\n\n");
+            output.append(synopsis);
+            output.append("\n\n");
+            
+            // Write to file (overwrite mode - always shows latest)
+            Files.writeString(filePath, output.toString(), 
+                StandardOpenOption.CREATE, 
+                StandardOpenOption.TRUNCATE_EXISTING);
+            
+            log.info("[Synopsis] Saved to file: {}", filePath.toAbsolutePath());
+            
+        } catch (IOException e) {
+            log.warn("[Synopsis] Failed to save to file: {}", e.getMessage());
+            // Don't throw - this is just a debugging feature
+        }
     }
 }

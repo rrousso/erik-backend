@@ -14,6 +14,8 @@ import java.util.List;
 /**
  * Service for extracting stanza setup from conversation history.
  * Handles both LLM communication and JSON response parsing.
+ * 
+ * ENHANCED: Now parses userBackstory field for private information
  */
 @Service
 public class StanzaExtractorService {
@@ -48,11 +50,16 @@ public class StanzaExtractorService {
         StanzaSetup setup = parseJsonResponse(response);
         
         log.info("[Extractor] Extraction complete");
+        log.info("[Extractor] User Role (PUBLIC): {}", setup.getUserRole());
+        log.info("[Extractor] User Backstory (PRIVATE): {}", 
+            setup.getUserBackstory().isEmpty() ? "[none]" : "[present - " + setup.getUserBackstory().length() + " chars]");
+        
         return setup;
     }
     
     /**
      * Parse JSON response from LLM into StanzaSetup object
+     * ENHANCED: Now parses userBackstory field
      */
     private StanzaSetup parseJsonResponse(String response) {
         StanzaSetup setup = new StanzaSetup();
@@ -64,6 +71,7 @@ public class StanzaExtractorService {
         setup.setSetting(extractField(json, "setting"));
         setup.setPremise(extractField(json, "premise"));
         setup.setUserRole(extractField(json, "userRole"));
+        setup.setUserBackstory(extractField(json, "userBackstory"));  // NEW - private backstory
         setup.setTone(extractField(json, "tone"));
         setup.setCharacters(extractArray(json, "characters"));
         setup.setSpecialRules(extractArray(json, "specialRules"));

@@ -5,6 +5,8 @@ COMMANDS AVAILABLE IN THIS STATUS: {AVAILABLE_FLAGS}
 
 USER INPUT: "{USER_INPUT}"
 
+CONVERSATION CONTEXT (Erik's last message): "{CONVERSATION_CONTEXT}"
+
 ===== DETECTION RULES =====
 
 STEP 1: Is this command in the available list?
@@ -31,35 +33,87 @@ STEP 3: Is the user DESCRIBING what they want? (return NONE)
    Phrases that mean DESCRIBING:
    - "I want to..."
    - "I want to make/do/create..."
+   - "I'd prefer to start at/on/with..."  ← NEW: Describing WHERE to start
+   - "I want to start at/on/with..."      ← NEW: Describing WHERE to start
    - "looking to..."
    - "let's do a [thing] where..."
    - "let's do a [thing] about..."
    - Contains "stanza where" or "stanza about"
    - Talking about what should happen in the scene
+   - Describing a starting point or location
    
    If ANY of these appear, return NONE.
 
 STEP 4: Is the user CONFIRMING to start? (return START only if STATUS=NONE)
-   START trigger phrases (when status is NONE):
-   - "let's begin", "let's start", "start it", "start"
-   - "let's go", "let's do it", "go ahead", "do it"
-   - "yes" / "sure" / "okay" / "yeah" (as single-word confirmation when asked if ready)
-   - "start stanza" (explicit command)
-   - Any short affirmative phrase after being asked "Ready to begin?"
    
-   Common variations that should trigger START:
-   - "lets do it!"
-   - "let's do it"
+   START trigger phrases (when status is NONE):
+   
+   TIER 1 - EXPLICIT COMMANDS (ALWAYS trigger START, regardless of context):
+   These phrases ALWAYS mean START, no matter what Erik said before.
+   
+   IMPORTANT: Look for these as complete phrases with word boundaries, not partial matches:
+   - "let's begin" or "lets begin" → START
+   - "let's start" or "lets start" → START
+   - "start stanza" or "begin stanza" → START
+   - Input is exactly "start" → START
+   - Input is exactly "begin" → START
+   - "let's go" (clearly meaning start) → START
+   - "let's do it" (clearly meaning start) → START
+   - "go ahead" (clearly meaning start) → START
+   
+   How to check for phrase matches:
+   - Look for "let's begin" as a phrase (not "let's" somewhere and "begin" elsewhere)
+   - Look for "let's start" as a phrase (not "let's make" or "stepsisters")
+   - If the words appear together as a phrase → START
+   - If the words appear separately → check if it's describing (Step 3)
+   
+   Examples of TIER 1:
+   - "let's begin" → START ✓
+   - "yeah let's start" → START ✓
+   - "Sounds good! Let's begin!" → START ✓
+   
+   Examples of NOT TIER 1:
+   - "let's make the stepsisters stepbrothers" → NONE (has "let's" but not "let's start/begin")
+   - "i want to start at the ball" → NONE (Step 3: describing location)
+   - "let's discuss starting" → NONE (Step 3: describing, not commanding)
+   
+   TIER 2 - CONFIRMATIONS (only trigger START if Erik asked for confirmation):
+   
+   CRITICAL - USE CONVERSATION CONTEXT for these short responses:
+   If Erik's last message asked for confirmation (contains "Ready", "begin", "start", "sound right", "sound good", or similar),
+   then short affirmations should trigger START.
+   
+   If Erik did NOT ask for confirmation, these are just normal conversation → NONE.
+   
+   Context-dependent confirmations:
+   - "yes" / "sure" / "okay" / "yeah" / "yep"
    - "do it!"
    - "yeah let's go"
    - "sure!"
    - "okay let's start"
    - "alright let's begin"
-   - "yeah"
-   - "yes"
    
-   If current status is NONE and user is confirming with ANY of these, return START.
-   Otherwise return NONE.
+   How to check for TIER 2:
+   1. Look at CONVERSATION_CONTEXT
+   2. Does it contain "Ready" or "begin" or "start" or "sound right" or "sound good" or end with "?"?
+   3. If YES and the question seems to be asking for confirmation → treat short user input as confirmation → START
+   4. If NO → treat user input as normal conversation → NONE
+   
+   Examples with context:
+   
+   Erik: "Ready to begin?"
+   User: "yeah" → START (TIER 2 confirmation with context)
+   
+   Erik: "Does that sound right?"
+   User: "yeah" → START (TIER 2 confirmation - "sound right" is confirmation question)
+   User: "Sounds good! Let's begin!" → START (TIER 1 explicit command "let's begin")
+   
+   Erik: "What genre?"
+   User: "yeah" → NONE (not a confirmation, just conversation)
+   User: "let's start" → START (TIER 1 explicit command, always works)
+   
+   Erik: "Ready to begin?"
+   User: "I'd prefer to start on the dance scene" → NONE (still describing, not confirming)
 
 STEP 5: Standalone command words:
    If the entire input is just one of these words, return the command:
@@ -74,9 +128,13 @@ STEP 6: Default
 ===== CRITICAL RULES =====
 1. ONLY return commands from the available list
 2. "I want to do a stanza..." = DESCRIBING = NONE (not a command!)
-3. Phrases with "where", "about", "with" = DESCRIBING = NONE
-4. When in doubt, return NONE
-5. "let's do it" in ANY form (with/without punctuation) = START when status is NONE
+3. "I want to start at/on X" = DESCRIBING WHERE TO START = NONE (not a command!)
+4. Phrases with "where", "about", "with", "at", "on" = DESCRIBING = NONE
+5. When in doubt, return NONE
+6. "let's begin" and "let's start" are TIER 1 commands - they ALWAYS trigger START
+7. Context matters ONLY for short confirmations like "yeah" or "sure" (TIER 2)
+8. If user says "let's begin" or "let's start" as a phrase, return START regardless of what Erik said
+9. "let's" + some other word that isn't "begin/start/go/do it" = NOT a start command
 
 ===== OUTPUT FORMAT =====
 Return ONLY one word: START, PAUSE, CONTINUE, END, ABANDON, or NONE
@@ -84,16 +142,35 @@ No explanation. No preamble. Just the word.
 
 ===== EXAMPLES =====
 
-STATUS: NONE | Available: START
+STATUS: NONE | Available: START | Erik: "What setting?"
 "I want to do a stanza where I walk on the beach" → NONE (describing)
 "hey erik, i want to do a stanza where i walk along the beach looking for shells" → NONE (describing)
 "let's do a beach stanza" → NONE (describing - contains "do a stanza")
-"let's begin" → START (confirming)
-"start" → START (confirming)
-"lets do it!" → START (confirming)
-"let's do it" → START (confirming)
-"yeah" → START (confirming after being asked)
-"sure!" → START (confirming after being asked)
+"I'd prefer to start on the dance scene" → NONE (describing WHERE to start)
+"I want to start at the ball" → NONE (describing WHERE to start)
+
+STATUS: NONE | Available: START | Erik: "Ready to begin?"
+"let's begin" → START (TIER 1 explicit command, always works)
+"start" → START (TIER 1 explicit command, always works)
+"lets do it!" → START (TIER 1 explicit command)
+"let's do it" → START (TIER 1 explicit command)
+"yeah" → START (TIER 2 confirmation with context)
+"sure!" → START (TIER 2 confirmation with context)
+"I'd prefer to start on the dance scene" → NONE (still describing, even with context)
+
+STATUS: NONE | Available: START | Erik: "Does that sound right?"
+"Sounds good! Let's begin!" → START (contains "let's begin" - TIER 1 explicit command)
+"Yeah, let's start!" → START (contains "let's start" - TIER 1 explicit command)
+"Sounds good! And also let's make the stepsisters stepbrothers" → NONE (contains "let's" but not "let's start" or "let's begin")
+"sounds good" → NONE (just agreement, no start command)
+"yeah" → START (TIER 2 - Erik asked confirmation question with "sound right")
+"sure" → START (TIER 2 - Erik asked confirmation question)
+
+STATUS: NONE | Available: START | Erik: "What genre do you want?"
+"yeah" → NONE (no confirmation context, just conversation)
+"sure" → NONE (no confirmation context, just conversation)
+"let's begin" → START (TIER 1 explicit command, always works)
+"start stanza" → START (TIER 1 explicit command, always works)
 
 STATUS: ACTIVE | Available: PAUSE, END, ABANDON  
 "pause" → PAUSE
