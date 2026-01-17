@@ -31,7 +31,9 @@ public class SynopsisGeneratorService {
     private final ConfigService configService;
     
     // File to save synopsis for debugging
-    private static final String SYNOPSIS_DEBUG_FILE = "user_data/current_synopsis.txt";
+    private static final String DETAILED_SYNOPSIS_DEBUG_FILE = "user_data/detailed_synopsis.txt";
+    private static final String QUICK_SYNOPSIS_DEBUG_FILE = "user_data/quick_synopsis.txt";
+    private static final String ROLLING_SYNOPSIS_DEBUG_FILE = "user_data/rolling_synopsis.txt";
     
     public SynopsisGeneratorService(LLMClientService llmClient, SystemPromptBuilderService promptBuilder, ConfigService configService) {
         this.llmClient = llmClient;
@@ -90,7 +92,7 @@ public class SynopsisGeneratorService {
         history.updateSynopsis(newSynopsis, getWindowSize());
         
         // ENHANCEMENT: Save synopsis to file for inspection
-        saveSynopsisToFile(newSynopsis, "rolling");
+        saveSynopsisToFile(newSynopsis, "rolling", ROLLING_SYNOPSIS_DEBUG_FILE);
 
         return newSynopsis;
     }
@@ -126,7 +128,7 @@ public class SynopsisGeneratorService {
         log.info("[QuickSynopsis] Generated (" + result.length() + " chars)");
         
         // ENHANCEMENT: Save quick synopsis to file
-        saveSynopsisToFile(result, "quick");
+        saveSynopsisToFile(result, "quick",QUICK_SYNOPSIS_DEBUG_FILE);
 
         return result;
     }
@@ -162,7 +164,7 @@ public class SynopsisGeneratorService {
         log.info("[DetailedSynopsis] Generated (" + result.length() + " chars)");
         
         // ENHANCEMENT: Save detailed synopsis to file
-        saveSynopsisToFile(result, "detailed");
+        saveSynopsisToFile(result, "detailed",DETAILED_SYNOPSIS_DEBUG_FILE);
 
         return result;
     }
@@ -247,9 +249,9 @@ public class SynopsisGeneratorService {
      * ENHANCEMENT: Save synopsis to file for debugging
      * This allows you to check the synopsis even if console output is truncated
      */
-    private void saveSynopsisToFile(String synopsis, String type) {
+    private void saveSynopsisToFile(String synopsis, String type, String path) {
         try {
-            Path filePath = Paths.get(SYNOPSIS_DEBUG_FILE);
+            Path filePath = Paths.get(path);
             
             // Ensure parent directory exists
             Files.createDirectories(filePath.getParent());

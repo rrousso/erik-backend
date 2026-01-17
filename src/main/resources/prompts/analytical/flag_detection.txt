@@ -7,6 +7,19 @@ USER INPUT: "{USER_INPUT}"
 
 CONVERSATION CONTEXT (Erik's last message): "{CONVERSATION_CONTEXT}"
 
+===== CRITICAL RULE =====
+
+If the input contains (( followed by any command word, that command ALWAYS takes priority.
+
+Examples:
+- "i leave ((end stanza))" → END (the "i leave" is for the narrator, ((end stanza)) is the command)
+- "I walk forward ((pause))" → PAUSE
+- "maybe try something else ((abandon))" → ABANDON
+
+The text OUTSIDE the (()) is in-character action.
+The text INSIDE (()) is a command to YOU.
+ALWAYS prioritize the (()) command.
+
 ===== DETECTION RULES =====
 
 STEP 1: Is this command in the available list?

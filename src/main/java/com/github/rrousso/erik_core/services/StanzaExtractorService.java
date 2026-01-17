@@ -8,6 +8,13 @@ import com.github.rrousso.erik_core.entities.ConversationHistory;
 import com.github.rrousso.erik_core.entities.ModelType;
 import com.github.rrousso.erik_core.entities.StanzaSetup;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,6 +31,7 @@ public class StanzaExtractorService {
     
     private final LLMClientService llmClient;
     private final SystemPromptBuilderService promptBuilder;
+    private static final String EXTRACTED_STANZA_DEBUG_FILE = "user_data/extracted_stanza.txt";
     
     public StanzaExtractorService(LLMClientService llmClient, SystemPromptBuilderService promptBuilder) {
         this.llmClient = llmClient;
@@ -50,10 +58,12 @@ public class StanzaExtractorService {
         StanzaSetup setup = parseJsonResponse(response);
         
         log.info("[Extractor] Extraction complete");
+        log.info("[Extractor] Premise: {}", setup.getPremise());
         log.info("[Extractor] User Role (PUBLIC): {}", setup.getUserRole());
         log.info("[Extractor] User Backstory (PRIVATE): {}", 
             setup.getUserBackstory().isEmpty() ? "[none]" : "[present - " + setup.getUserBackstory().length() + " chars]");
         
+        saveSynopsisToFile(response,EXTRACTED_STANZA_DEBUG_FILE);
         return setup;
     }
     
@@ -224,5 +234,39 @@ public class StanzaExtractorService {
         }
         
         return sb.toString();
+    }
+    
+    /**
+     * ENHANCEMENT: Save synopsis to file for debugging
+     * This allows you to check the synopsis even if console output is truncated
+     */
+    private void saveSynopsisToFile(String synopsis, String path) {
+        try {
+            Path filePath = Paths.get(path);
+            
+            // Ensure parent directory exists
+            Files.createDirectories(filePath.getParent());
+            
+            // Create formatted output with timestamp
+            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            StringBuilder output = new StringBuilder();
+            output.append("=".repeat(80)).append("\n");
+            output.append("EXTRACTED STANZA").append("\n");
+            output.append("Timestamp: ").append(timestamp).append("\n");
+            output.append("=".repeat(80)).append("\n\n");
+            output.append(synopsis);
+            output.append("\n\n");
+            
+            // Write to file (overwrite mode - always shows latest)
+            Files.writeString(filePath, output.toString(), 
+                StandardOpenOption.CREATE, 
+                StandardOpenOption.TRUNCATE_EXISTING);
+            
+            log.info("[Synopsis] Saved to file: {}", filePath.toAbsolutePath());
+            
+        } catch (IOException e) {
+            log.warn("[Synopsis] Failed to save to file: {}", e.getMessage());
+            // Don't throw - this is just a debugging feature
+        }
     }
 }
