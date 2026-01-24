@@ -33,6 +33,7 @@ public class SynopsisGeneratorService {
     // File to save synopsis for debugging
     private static final String QUICK_SYNOPSIS_DEBUG_FILE = "user_data/quick_synopsis.txt";
     private static final String ROLLING_SYNOPSIS_DEBUG_FILE = "user_data/rolling_synopsis.txt";
+    private static final String DISTILLED_CHANGES_DEBUG_FILE = "user_data/distilled_changes.txt";
     
     public SynopsisGeneratorService(LLMClientService llmClient, SystemPromptBuilderService promptBuilder, ConfigService configService) {
         this.llmClient = llmClient;
@@ -143,11 +144,18 @@ public class SynopsisGeneratorService {
         String systemPrompt = promptBuilder.buildChangeDistillerPrompt();
         
         // Use ANALYTICAL model for change detection
-        return llmClient.call(
+        String result = llmClient.call(
             ModelType.ANALYTICAL,
             systemPrompt,
             conversationText
         );
+
+        log.info("[Distilled Changes] Generated (" + result.length() + " chars)");
+        
+        // ENHANCEMENT: Save quick synopsis to file
+        saveSynopsisToFile(result, "distilled",DISTILLED_CHANGES_DEBUG_FILE);
+
+        return result;
     }
 
     /**

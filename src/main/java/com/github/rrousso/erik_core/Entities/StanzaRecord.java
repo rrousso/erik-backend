@@ -41,17 +41,17 @@ public class StanzaRecord {
     private String tone;
     
     // Lists need @ElementCollection
-    @ElementCollection
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "stanza_characters", joinColumns = @JoinColumn(name = "stanza_id"))
     @Column(name = "character_name")
     private List<String> characters = new ArrayList<>();
     
-    @ElementCollection
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "stanza_events", joinColumns = @JoinColumn(name = "stanza_id"))
     @Column(name = "event")
     private List<String> previousEvents = new ArrayList<>();
     
-    @ElementCollection
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "stanza_rules", joinColumns = @JoinColumn(name = "stanza_id"))
     @Column(name = "rule")
     private List<String> specialRules = new ArrayList<>();

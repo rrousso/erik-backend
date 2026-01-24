@@ -82,8 +82,7 @@ public class CommandService {
             /help              				- Show this help message
             /list              				- List all saved stanzas (ID + quick synopsis)
             /search [keywords] 		     	- Search stanzas by keywords
-            /search [section]: [keywords] 	- Search on specific stanza sections by keywords
-        									  Available sections: setting-premise-tone-character					
+            /search [section]: [keywords] 	- Search on specific stanza sections by keywords. Available sections: setting-premise-tone-character					
             /load [id]         				- Load a stanza into Erik's memory for reference
             /clear             				- Clear loaded stanza memory
             
