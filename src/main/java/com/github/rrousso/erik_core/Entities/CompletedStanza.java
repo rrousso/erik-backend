@@ -3,13 +3,11 @@ package com.github.rrousso.erik_core.entities;
 public class CompletedStanza {
 	
 	private final String quickSynopsis;      // 150 words, narrative
-	private final String detailedSynopsis;   // Structured, comprehensive
-	private final StanzaSetup originalSetup; // The setup that started it
+	private final StanzaMetadata metadata; // All the information saved from the stanza
     
-    public CompletedStanza(String quickSynopsis, String detailedSynopsis, StanzaSetup originalSetup) {
+    public CompletedStanza(String quickSynopsis, StanzaMetadata metadata) {
         this.quickSynopsis = quickSynopsis;
-        this.detailedSynopsis = detailedSynopsis;
-        this.originalSetup = originalSetup;
+        this.metadata = metadata;
     }
 	
 	
@@ -17,12 +15,8 @@ public class CompletedStanza {
 		return quickSynopsis;
 	}
 
-	public String getDetailedSynopsis() {
-		return detailedSynopsis;
-	}
-
-	public StanzaSetup getOriginalSetup() {
-		return originalSetup;
+	public StanzaMetadata getMetadata() {
+		return metadata;
 	}
 
 }

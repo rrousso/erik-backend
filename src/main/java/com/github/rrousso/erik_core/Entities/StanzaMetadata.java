@@ -9,7 +9,7 @@ import java.util.List;
  * 
  * ENHANCED: Now separates public role (visible to characters) from private backstory (narrator-only)
  */
-public class StanzaSetup {
+public class StanzaMetadata {
     
     private List<String> characters = new ArrayList<>();
     private String setting = "";
@@ -17,6 +17,7 @@ public class StanzaSetup {
     private String userRole = "";  // PUBLIC - what characters can observe
     private String userBackstory = "";  // PRIVATE - narrator-only, characters don't know
     private String tone = "";
+    private List<String> previousEvents = new ArrayList<>();
     private List<String> specialRules = new ArrayList<>();
     
     // ========== GETTERS ==========
@@ -43,6 +44,10 @@ public class StanzaSetup {
     
     public String getTone() {
         return tone;
+    }
+    
+    public List<String> getPreviousEvents() {
+        return previousEvents;
     }
     
     public List<String> getSpecialRules() {
@@ -73,6 +78,10 @@ public class StanzaSetup {
     
     public void setTone(String tone) {
         this.tone = tone;
+    }
+    
+    public void setPreviousEvents(List<String> previousEvents) {
+        this.previousEvents = previousEvents;
     }
     
     public void setSpecialRules(List<String> specialRules) {
@@ -118,6 +127,14 @@ public class StanzaSetup {
             sb.append("Tone/Genre: ").append(tone).append("\n\n");
         }
         
+        if (!previousEvents.isEmpty()) {
+            sb.append("=== WHAT HAPPENED PREVIOUSLY ===\n\n");
+            for (int i = 0; i < previousEvents.size(); i++) {
+                sb.append((i + 1) + ". " + previousEvents.get(i) + "\n");
+            }
+            sb.append("\n");
+        }
+        
         if (!specialRules.isEmpty()) {
             sb.append("Special Rules:\n");
             for (String rule : specialRules) {
@@ -143,7 +160,7 @@ public class StanzaSetup {
      * Debug helper
      */
     public void printDebug() {
-        System.out.println("\n[DEBUG] StanzaSetup:");
+        System.out.println("\n[DEBUG] StanzaMetadata:");
         System.out.println("  Setting: " + setting);
         System.out.println("  Premise: " + premise);
         System.out.println("  User Role (PUBLIC): " + userRole);

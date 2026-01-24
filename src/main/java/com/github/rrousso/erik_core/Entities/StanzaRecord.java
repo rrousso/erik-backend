@@ -24,11 +24,7 @@ public class StanzaRecord {
     @Column(length = 2000)
     private String quickSynopsis;
     
-    @Lob  
-    @Column(columnDefinition = "TEXT")
-    private String detailedSynopsis;
-    
-    // StanzaSetup fields
+    // StanzaMetadata fields
     @Column(length = 500)
     private String setting;
     
@@ -51,6 +47,11 @@ public class StanzaRecord {
     private List<String> characters = new ArrayList<>();
     
     @ElementCollection
+    @CollectionTable(name = "stanza_events", joinColumns = @JoinColumn(name = "stanza_id"))
+    @Column(name = "event")
+    private List<String> previousEvents = new ArrayList<>();
+    
+    @ElementCollection
     @CollectionTable(name = "stanza_rules", joinColumns = @JoinColumn(name = "stanza_id"))
     @Column(name = "rule")
     private List<String> specialRules = new ArrayList<>();
@@ -67,10 +68,9 @@ public class StanzaRecord {
     }
     
     // Useful constructor
-    public StanzaRecord(Persona persona, String quickSynopsis, String detailedSynopsis) {
+    public StanzaRecord(Persona persona, String quickSynopsis) {
         this.persona = persona;
         this.quickSynopsis = quickSynopsis;
-        this.detailedSynopsis = detailedSynopsis;
     }
 
 	public Long getId() {
@@ -95,14 +95,6 @@ public class StanzaRecord {
 
 	public void setQuickSynopsis(String quickSynopsis) {
 		this.quickSynopsis = quickSynopsis;
-	}
-
-	public String getDetailedSynopsis() {
-		return detailedSynopsis;
-	}
-
-	public void setDetailedSynopsis(String detailedSynopsis) {
-		this.detailedSynopsis = detailedSynopsis;
 	}
 
 	public String getSetting() {
@@ -153,6 +145,14 @@ public class StanzaRecord {
 		this.characters = characters;
 	}
 
+	public List<String> getPreviousEvents() {
+	    return previousEvents;
+	}
+
+	public void setPreviousEvents(List<String> previousEvents) {
+	    this.previousEvents = previousEvents;
+	}
+	
 	public List<String> getSpecialRules() {
 		return specialRules;
 	}

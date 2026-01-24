@@ -15,31 +15,31 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @DisplayName("Stanza Setup Entity test")
 public class StanzaSetupTest {
 	
-	private StanzaSetup stanzaSetup;
+	private StanzaMetadata stanzaMetadata;
 	
     @BeforeEach
     void setUp(){
-    	stanzaSetup = new StanzaSetup();
+    	stanzaMetadata = new StanzaMetadata();
     }
     
     @Test
     @DisplayName("Should parse To a String for Context to the Narrator")
     void shouldParseToNarratorContext(){
-    	stanzaSetup.setSetting("Dance ball at the castle");
-    	stanzaSetup.setPremise("The cinderella story");
-    	stanzaSetup.setTone("fairy tale, magical");
-    	stanzaSetup.setUserRole("User is cinderella");
+    	stanzaMetadata.setSetting("Dance ball at the castle");
+    	stanzaMetadata.setPremise("The cinderella story");
+    	stanzaMetadata.setTone("fairy tale, magical");
+    	stanzaMetadata.setUserRole("User is cinderella");
     	
     	List<String> characters = new ArrayList<String>();
     	characters.add("The Prince");
-    	stanzaSetup.setCharacters(characters);
+    	stanzaMetadata.setCharacters(characters);
     	
     	List<String> rules = new ArrayList<String>();
     	rules.add("The user's dress is purple");
     	rules.add("Stepsisters don't recognize the user");
-    	stanzaSetup.setSpecialRules(rules);
+    	stanzaMetadata.setSpecialRules(rules);
     	
-    	String context = stanzaSetup.toNarratorContext();
+    	String context = stanzaMetadata.toNarratorContext();
     	
         assertTrue(context.contains("Setting: Dance ball at the castle"));
         assertTrue(context.contains("Premise: The cinderella story"));
@@ -54,10 +54,10 @@ public class StanzaSetupTest {
     @Test
     @DisplayName("Should handle empty fields gracefully")
     void shouldHandleEmptyFields() {
-        StanzaSetup stanzaSetup = new StanzaSetup();
-        stanzaSetup.setSetting("Beach");
+        StanzaMetadata stanzaMetadata = new StanzaMetadata();
+        stanzaMetadata.setSetting("Beach");
         
-        String context = stanzaSetup.toNarratorContext();
+        String context = stanzaMetadata.toNarratorContext();
         
         assertTrue(context.contains("CURRENT STANZA SETUP:"));
         assertTrue(context.contains("Setting: Beach"));
@@ -72,7 +72,7 @@ public class StanzaSetupTest {
     @Test
     @DisplayName("Should handle completely empty setup")
     void shouldHandleCompletelyEmptySetup() {
-        StanzaSetup emptySetup = new StanzaSetup();
+        StanzaMetadata emptySetup = new StanzaMetadata();
         
         String context = emptySetup.toNarratorContext();
         

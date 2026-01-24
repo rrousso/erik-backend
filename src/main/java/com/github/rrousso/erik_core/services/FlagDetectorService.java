@@ -25,7 +25,7 @@ import java.util.Objects;
 public class FlagDetectorService {
     
     private static final Logger log = LoggerFactory.getLogger(FlagDetectorService.class);
-    
+     
     private final LLMClientService llmClient;
     private final SystemPromptBuilderService promptBuilder;
     

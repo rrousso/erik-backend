@@ -49,7 +49,9 @@ public class SynopsisGeneratorServiceTest {
     	
 		when(configService.getWindowSize()).thenReturn(2);
 		
-    	when(promptBuilder.buildWorldSnapshotPrompt())
+		when(configService.getUserPersona()).thenReturn("Persona String");
+		
+    	when(promptBuilder.buildWorldSnapshotPrompt(configService.getUserPersona()))
         .thenReturn("Mock prompt template");
     	
         when(llmClient.call(
@@ -111,8 +113,10 @@ public class SynopsisGeneratorServiceTest {
     	history.addAssistantMessage("And the world reacts to it!");
     	history.addUserMessage("I do that.");
     	history.addAssistantMessage("And here are the consequences!");
-		
-    	when(promptBuilder.buildQuickSynopsisPrompt())
+    	
+    	when(configService.getUserPersona()).thenReturn("Persona String");
+    	
+    	when(promptBuilder.buildQuickSynopsisPrompt(configService.getUserPersona()))
         .thenReturn("Mock prompt template");
     	
         when(llmClient.call(
@@ -124,31 +128,6 @@ public class SynopsisGeneratorServiceTest {
         String quickSynopsis = generator.generateQuickSynopsis(history);
         
         assertEquals("This is a very short synopsis for the user", quickSynopsis);
-	}
-	
-	@Test
-	@DisplayName("Should create a detailed Synopsis")
-	void shouldGenerateDetailedSynopsis() throws Exception{
-		
-		ConversationHistory history = new ConversationHistory();
-		
-    	history.addUserMessage("I do this.");
-    	history.addAssistantMessage("And the world reacts to it!");
-    	history.addUserMessage("I do that.");
-    	history.addAssistantMessage("And here are the consequences!");
-		
-    	when(promptBuilder.buildDetailedSynopsisPrompt())
-        .thenReturn("Mock prompt template");
-    	
-        when(llmClient.call(
-                eq(ModelType.NARRATIVE),
-                anyString(),
-                anyString()
-            )).thenReturn("This is a detailed synopsis for the Erik and to save in the Database");
-        
-        String detailedSynopsis = generator.generateDetailedSynopsis(history);
-        
-        assertEquals("This is a detailed synopsis for the Erik and to save in the Database", detailedSynopsis);
 	}
 	
 	@Test
@@ -200,7 +179,8 @@ public class SynopsisGeneratorServiceTest {
 	    
 	    when(configService.getThresholdSize()).thenReturn(4);
 	    when(configService.getWindowSize()).thenReturn(2);
-	    when(promptBuilder.buildWorldSnapshotPrompt()).thenReturn("prompt");
+	    when(configService.getUserPersona()).thenReturn("Persona String");
+	    when(promptBuilder.buildWorldSnapshotPrompt(configService.getUserPersona())).thenReturn("prompt");
 	    
 	    when(llmClient.call(eq(ModelType.ANALYTICAL), anyString(), anyString()))
 	        .thenThrow(new RuntimeException("API Error"));

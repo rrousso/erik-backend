@@ -6,7 +6,7 @@ import org.springframework.stereotype.Service;
 
 import com.github.rrousso.erik_core.entities.ConversationHistory;
 import com.github.rrousso.erik_core.entities.ModelType;
-import com.github.rrousso.erik_core.entities.StanzaSetup;
+import com.github.rrousso.erik_core.entities.StanzaMetadata;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -41,12 +41,12 @@ public class StanzaExtractorService {
     /**
      * Extract stanza setup from conversation history
      */
-    public StanzaSetup extract(ConversationHistory history) throws Exception {
+    public StanzaMetadata extractFromVoidHistory(ConversationHistory history) throws Exception {
         log.info("[Extractor] Asking LLM to structure the stanza...");
         
         List<ConversationHistory.Message> voidConvo = history.getConversationForExtraction();
         String conversationContext = buildConversationContext(voidConvo);
-        String extractionSystemPrompt = promptBuilder.buildExtractionPrompt();
+        String extractionSystemPrompt = "Extract stanza setup information from the planning conversation on the user input.\n\n" + promptBuilder.buildExtractionPrompt();
         
         String response = llmClient.call(
             ModelType.ANALYTICAL,
@@ -55,7 +55,33 @@ public class StanzaExtractorService {
         );
         
         // Parse the JSON response
-        StanzaSetup setup = parseJsonResponse(response);
+        StanzaMetadata setup = parseJsonResponse(response);
+        
+        log.info("[Extractor] Extraction complete");
+        log.info("[Extractor] Premise: {}", setup.getPremise());
+        log.info("[Extractor] User Role (PUBLIC): {}", setup.getUserRole());
+        log.info("[Extractor] User Backstory (PRIVATE): {}", 
+            setup.getUserBackstory().isEmpty() ? "[none]" : "[present - " + setup.getUserBackstory().length() + " chars]");
+        
+        saveSynopsisToFile(response,EXTRACTED_STANZA_DEBUG_FILE);
+        return setup;
+    }
+    
+    public StanzaMetadata extractFromStanzaHistory(ConversationHistory history) throws Exception {
+        log.info("[Extractor] Asking LLM to structure the stanza...");
+        
+        List<ConversationHistory.Message> stanzaConvo = history.getConversationForExtraction();
+        String conversationContext = buildStanzaContext(stanzaConvo, history.getSynopsis());
+        String extractionSystemPrompt = "Extract stanza setup information from the synopsis and last exchanges on the user input.\n\n" + promptBuilder.buildExtractionPrompt();
+        
+        String response = llmClient.call(
+            ModelType.ANALYTICAL,
+            extractionSystemPrompt,
+            conversationContext
+        );
+        
+        // Parse the JSON response
+        StanzaMetadata setup = parseJsonResponse(response);
         
         log.info("[Extractor] Extraction complete");
         log.info("[Extractor] Premise: {}", setup.getPremise());
@@ -68,11 +94,11 @@ public class StanzaExtractorService {
     }
     
     /**
-     * Parse JSON response from LLM into StanzaSetup object
+     * Parse JSON response from LLM into StanzaMetadata object
      * ENHANCED: Now parses userBackstory field
      */
-    private StanzaSetup parseJsonResponse(String response) {
-        StanzaSetup setup = new StanzaSetup();
+    private StanzaMetadata parseJsonResponse(String response) {
+        StanzaMetadata setup = new StanzaMetadata();
         
         // Clean up response (remove markdown code fences)
         String json = response.replaceAll("```json", "").replaceAll("```", "").trim();
@@ -81,9 +107,10 @@ public class StanzaExtractorService {
         setup.setSetting(extractField(json, "setting"));
         setup.setPremise(extractField(json, "premise"));
         setup.setUserRole(extractField(json, "userRole"));
-        setup.setUserBackstory(extractField(json, "userBackstory"));  // NEW - private backstory
+        setup.setUserBackstory(extractField(json, "userBackstory"));
         setup.setTone(extractField(json, "tone"));
         setup.setCharacters(extractArray(json, "characters"));
+        setup.setPreviousEvents(extractArray(json, "previousEvents"));
         setup.setSpecialRules(extractArray(json, "specialRules"));
         
         return setup;
@@ -227,6 +254,21 @@ public class StanzaExtractorService {
         StringBuilder sb = new StringBuilder();
         sb.append("Here is our planning conversation:\n\n");
         
+        for (ConversationHistory.Message msg : messages) {
+            sb.append(msg.getRole().toUpperCase()).append(": ");
+            sb.append(msg.getContent());
+            sb.append("\n\n");
+        }
+        
+        return sb.toString();
+    }
+    
+    private String buildStanzaContext(List<ConversationHistory.Message> messages, String synopsis) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Here the current synopsis and last stanza exchanges:\n\n");
+        sb.append("CURRENT SYNOPSIS:\n");
+        sb.append(synopsis + "\n");
+        sb.append("LAST EXCHANGES:\n\n");
         for (ConversationHistory.Message msg : messages) {
             sb.append(msg.getRole().toUpperCase()).append(": ");
             sb.append(msg.getContent());

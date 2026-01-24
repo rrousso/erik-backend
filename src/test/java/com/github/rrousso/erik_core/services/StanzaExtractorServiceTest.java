@@ -15,7 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.github.rrousso.erik_core.entities.ConversationHistory;
 import com.github.rrousso.erik_core.entities.ModelType;
-import com.github.rrousso.erik_core.entities.StanzaSetup;
+import com.github.rrousso.erik_core.entities.StanzaMetadata;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Stanza Extractor Service Tests")
@@ -60,7 +60,7 @@ public class StanzaExtractorServiceTest {
                   }
                   """);
         
-        StanzaSetup setup = stanzaExtractor.extract(history);
+        StanzaMetadata setup = stanzaExtractor.extractFromVoidHistory(history);
         
         assertEquals("Dance ball at the castle", setup.getSetting());
         assertEquals("The cinderella story", setup.getPremise());
@@ -95,7 +95,7 @@ public class StanzaExtractorServiceTest {
                   }
                   """);
         
-        StanzaSetup setup = stanzaExtractor.extract(history);
+        StanzaMetadata setup = stanzaExtractor.extractFromVoidHistory(history);
         
         assertEquals("Dance ball at the castle", setup.getSetting());
         assertEquals("The cinderella story", setup.getPremise());
@@ -131,7 +131,7 @@ public class StanzaExtractorServiceTest {
                   
                   """); //missing quotations and a comma
         
-        StanzaSetup setup = stanzaExtractor.extract(history);
+        StanzaMetadata setup = stanzaExtractor.extractFromVoidHistory(history);
         
         assertEquals("", setup.getSetting());
         assertEquals("The cinderella story", setup.getPremise());
@@ -157,7 +157,7 @@ public class StanzaExtractorServiceTest {
             .call(eq(ModelType.ANALYTICAL), anyString(), anyString());
 
         assertThrows(RuntimeException.class, () -> {
-            stanzaExtractor.extract(history);
+            stanzaExtractor.extractFromVoidHistory(history);
         });
     }
     

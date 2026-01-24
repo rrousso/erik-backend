@@ -31,7 +31,6 @@ public class SynopsisGeneratorService {
     private final ConfigService configService;
     
     // File to save synopsis for debugging
-    private static final String DETAILED_SYNOPSIS_DEBUG_FILE = "user_data/detailed_synopsis.txt";
     private static final String QUICK_SYNOPSIS_DEBUG_FILE = "user_data/quick_synopsis.txt";
     private static final String ROLLING_SYNOPSIS_DEBUG_FILE = "user_data/rolling_synopsis.txt";
     
@@ -41,7 +40,7 @@ public class SynopsisGeneratorService {
         this.configService = configService;
     }
     
-    /**
+    /** 
      * Generate rolling synopsis using world_snapshot_synopsis template
      * Uses ANALYTICAL model (Gemini) for efficiency
      * Uses trimmed currentHistory (frequent, efficient updates)
@@ -73,7 +72,7 @@ public class SynopsisGeneratorService {
         log.info("[Synopsis] Previous synopsis (" + previousSynopsis.length() + " chars)");
 
         // Get template and fill it in
-        String template = promptBuilder.buildWorldSnapshotPrompt();
+        String template = promptBuilder.buildWorldSnapshotPrompt(configService.getUserPersona());
         String filledPrompt = template
             .replace("${previousSnapshot}", previousSynopsis)
             .replace("${exchangeText}", exchangeText);
@@ -111,7 +110,7 @@ public class SynopsisGeneratorService {
                 "recent messages (" + history.getAllMessages().size() + " messages)");
 
         // Get template and fill it in
-        String template = promptBuilder.buildQuickSynopsisPrompt();
+        String template = promptBuilder.buildQuickSynopsisPrompt(configService.getUserPersona());
         String filledPrompt = template
             .replace("${previousSnapshot}", synopsis.isEmpty() ? "[Start of stanza]" : synopsis)
             .replace("${conversationText}", recentMessages);
@@ -129,42 +128,6 @@ public class SynopsisGeneratorService {
         
         // ENHANCEMENT: Save quick synopsis to file
         saveSynopsisToFile(result, "quick",QUICK_SYNOPSIS_DEBUG_FILE);
-
-        return result;
-    }
-
-    /**
-     * Generate detailed synopsis using template
-     * Uses NARRATIVE model (Claude) for comprehensive quality
-     * Uses synopsis + currentHistory for complete context
-     */
-    public String generateDetailedSynopsis(ConversationHistory history) throws Exception {
-
-        String synopsis = history.getSynopsis();
-        String recentMessages = formatMessagesAsText(history.getAllMessages(), true);  
-
-        log.info("[DetailedSynopsis] Using synopsis (" + synopsis.length() + " chars) + " +
-                "recent messages (" + history.getAllMessages().size() + " messages)");
-
-        // Get template and fill it in
-        String template = promptBuilder.buildDetailedSynopsisPrompt();
-        String filledPrompt = template
-            .replace("${previousSnapshot}", synopsis.isEmpty() ? "[Start of stanza]" : synopsis)
-            .replace("${conversationText}", recentMessages);
-
-        log.info("[DetailedSynopsis] Generating detailed synopsis...");
-
-        // Use NARRATIVE model for quality
-        String result = llmClient.call(
-            ModelType.NARRATIVE,
-            filledPrompt,
-            "Create the detailed synopsis."
-        );
-
-        log.info("[DetailedSynopsis] Generated (" + result.length() + " chars)");
-        
-        // ENHANCEMENT: Save detailed synopsis to file
-        saveSynopsisToFile(result, "detailed",DETAILED_SYNOPSIS_DEBUG_FILE);
 
         return result;
     }

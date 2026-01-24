@@ -1,5 +1,3 @@
-Extract stanza setup information from the planning conversation on the user input.
-
 OUTPUT ONLY valid JSON with this exact structure:
 
 {
@@ -9,121 +7,61 @@ OUTPUT ONLY valid JSON with this exact structure:
   "userBackstory": "private user background (PRIVATE - characters don't know this)",
   "tone": "genre/mood/style (e.g. 'romantic', 'tense', 'horror')",
   "characters": ["character 1 name and brief description", "character 2...", ...],
-  "specialRules": ["any specific rules or notes", "another rule", ...]
+  "specialRules": ["any specific rules or notes", "another rule", ...],
+  "previousEvents": ["event 1", "event 2", ...]
 }
 
-**CRITICAL - PUBLIC VS PRIVATE INFORMATION:**
+**SOURCE TYPES:**
 
-There is a CRUCIAL difference between:
-- **PUBLIC**: What characters in the scene can observe about the user
-- **PRIVATE**: The user's backstory, secrets, internal state
+You may receive either:
+- A **planning conversation** between user and Erik (for new stanzas)
+- A **synopsis with exchanges** from a completed stanza (for continuing/reliving)
 
-**USER ROLE (PUBLIC):**
-What the user appears to be in this scene - what characters can SEE or OBSERVE.
-Examples:
-- "Vendor at artisan fair selling stones"
-- "New person in town"
-- "Customer at a coffee shop"
-- "Visitor passing through"
-- "Student at the university"
+Extract the same JSON structure from either source.
 
-DO NOT include backstory, secrets, or private information here.
-This is what characters will see when they look at the user.
+**FIELD GUIDELINES:**
 
-**USER BACKSTORY (PRIVATE):**
-The user's actual background, history, secrets, trauma, hidden identity.
-This information is PRIVATE - characters do NOT know it unless the user tells them in-scene.
+**setting**: Where/when the scene takes place
 
-Examples:
-- "Ex-emissary who lost their pack to hunters"
-- "Secretly a werewolf hiding their nature"
-- "Running from a dark past"
-- "Has magical abilities but doesn't advertise it"
-- "Former member of a supernatural group"
+**premise**: The core scenario or situation
 
-**EXTRACTION GUIDELINES:**
+**userRole (PUBLIC)**: What the user APPEARS to be - what characters can observe
+- "Vendor at artisan fair"
+- "Servant in stepmother's household"
+- "Person walking on the beach"
 
-When extracting from the planning conversation:
+**userBackstory (PRIVATE)**: Background characters do NOT know unless told in-scene
+- "Ex-emissary who lost their pack"
+- "True heir, treated as servant"
+- "Secretly a werewolf"
 
-1. **Look for what the user APPEARS as in the scene** → userRole (PUBLIC)
-   - "I'm running a booth at the fair"
-   - "I'm the new person in town"
-   - "I'm a customer"
+**tone**: Genre/mood/style (e.g., "romantic", "horror", "fairy tale")
 
-2. **Look for the user's backstory/secrets** → userBackstory (PRIVATE)
-   - "I used to be an emissary"
-   - "I lost my pack"
-   - "I'm hiding from hunters"
-   - "I have trauma from..."
+**characters**: List of characters with brief descriptions
+- Include name and role/relationship
+- Do NOT include Erik (the planning assistant)
+- Do NOT include the user
 
-3. **Characters should be described as they appear** → characters
-   - Include observable details
-   - Do NOT include what they can sense/know about the user's secrets
+**specialRules**: Canon divergences, special conditions, requests
+- "College AU - all characters in their 20s"
+- "Post-season 3 timeline"
 
-4. **Canon divergences go in specialRules** → specialRules
-   - "College AU - all characters in their 20s"
-   - "Post-season 3 timeline"
-   - "Sirius survived"
+**previousEvents**: Chronological list of major events that happened
+- Leave as empty array [] for NEW stanzas from planning conversations
+- Populate with key events when extracting from synopsis/completed stanza
+- Each event = one clear sentence
+- Only include events that actually happened, not plans
 
-**EXAMPLES:**
+**CRITICAL - PUBLIC VS PRIVATE:**
 
-Input conversation:
-USER: "I want to run a booth at an artisan fair in Beacon Hills"
-ERIK: "Cool, what's your background?"
-USER: "I'm an ex-emissary, lost my pack to hunters, trying to start over"
-ERIK: "Got it, so you're keeping a low profile?"
-USER: "Yeah, just selling enchanted stones, not advertising my past"
+userRole = what characters SEE
+userBackstory = what characters DON'T KNOW
 
-Correct extraction:
-```json
-{
-  "setting": "Artisan fair in Beacon Hills town square",
-  "premise": "User runs a booth selling enchanted items",
-  "userRole": "Vendor at artisan fair selling stones",
-  "userBackstory": "Ex-emissary who lost their pack to hunters, trying to start over and keep a low profile",
-  "tone": "Contemporary supernatural",
-  "characters": [],
-  "specialRules": ["User's magical nature is not obvious to observers"]
-}
-```
+If unsure, put it in userBackstory (private).
 
-**WHY THIS MATTERS:**
-
-If you put "User is an ex-emissary" in userRole (PUBLIC), then characters in the scene can know this.
-If you put it in userBackstory (PRIVATE), only the narrator knows, and characters must discover it through roleplay.
-
-**CRITICAL - INFORMATION FLOW:**
-
-PUBLIC (userRole, specialRules about world) → Characters can know this
-PRIVATE (userBackstory) → Only narrator knows, characters don't unless user reveals it
-
-When in doubt: If the user discussed it with Erik but didn't say "characters know this," put it in userBackstory (PRIVATE).
-
-EXTRACTION RULES:
-- If something wasn't discussed, use empty string "" or empty array []
-- Be concise but capture the essential details
-- Extract character names and brief descriptions
-- Note any special requests (pacing, character behavior, etc.)
-- Capture the mood/tone/genre clearly
-- Erik the assistant talking to the user MUST NOT be added as a character on the stanza
-- Distinguish PUBLIC (observable) from PRIVATE (backstory/secrets)
-
-**CANON DIVERGENCE DETECTION:**
-
-If the user references established fictional universes and makes changes to canon, capture these in specialRules.
-
-Canon divergences include:
-- Age changes (e.g., "Teen Wolf but college aged")
-- Timeline shifts (e.g., "Post-war Harry Potter")
-- Relationship changes (e.g., "Sirius survived")
-- Setting changes (e.g., "Hogwarts in modern day")
-- Role changes (e.g., "Stiles works at sheriff's department")
-
-CRITICAL:
-- Output ONLY the JSON object
+**OUTPUT:**
+- ONLY the JSON object
 - No preamble
 - No markdown
 - No explanation
 - No ```json``` tags
-- Just the raw JSON
-- Always separate PUBLIC (userRole) from PRIVATE (userBackstory)

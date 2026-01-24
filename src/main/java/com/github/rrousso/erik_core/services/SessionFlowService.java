@@ -10,13 +10,15 @@ import com.github.rrousso.erik_core.entities.ModelType;
 import com.github.rrousso.erik_core.entities.Persona;
 import com.github.rrousso.erik_core.entities.SessionState;
 import com.github.rrousso.erik_core.entities.StanzaRecord;
-import com.github.rrousso.erik_core.entities.StanzaSetup;
+import com.github.rrousso.erik_core.entities.StanzaMetadata;
 import com.github.rrousso.erik_core.entities.StanzaStatus;
 import com.github.rrousso.erik_core.repositories.PersonaRepository;
 import com.github.rrousso.erik_core.repositories.StanzaRecordRepository;
+import com.github.rrousso.erik_core.entities.SessionContext;
 
 import jakarta.transaction.Transactional;
 
+import java.util.ArrayList;
 import java.util.Objects;
 
 /**
@@ -35,6 +37,7 @@ public class SessionFlowService {
     private final FlagDetectorService flagDetector;
     private final PersonaRepository personaRepository;
     private final StanzaRecordRepository stanzaRecordRepository;
+    private final SessionAssemblerService sessionAssembler;
     private String message = "no message";
     
     public SessionFlowService(
@@ -43,6 +46,7 @@ public class SessionFlowService {
             StanzaExtractorService stanzaExtractor,
             SynopsisGeneratorService synopsisGenerator, 
             FlagDetectorService flagDetector,
+            SessionAssemblerService sessionAssembler,  // <-- ADD THIS
             PersonaRepository personaRepository, 
             StanzaRecordRepository stanzaRecordRepository) {
         this.llmClient = llmClient;
@@ -50,8 +54,9 @@ public class SessionFlowService {
         this.stanzaExtractor = stanzaExtractor;
         this.synopsisGenerator = synopsisGenerator;
         this.flagDetector = flagDetector;
-		this.personaRepository = personaRepository;
-		this.stanzaRecordRepository = stanzaRecordRepository;
+        this.sessionAssembler = sessionAssembler; 
+        this.personaRepository = personaRepository;
+        this.stanzaRecordRepository = stanzaRecordRepository;
         
         log.info("SessionFlowService initialized");
     }
@@ -134,20 +139,16 @@ public class SessionFlowService {
         }
     }
     
-    /**
-     * Call Erik with complete system prompt (synopsis + recent exchanges included)
-     * Uses simple call(), not callWithHistory()
-     */
     String callErik(SessionState state, String userInput) throws Exception {
+         
+        SessionContext context = sessionAssembler.assembleForVoid(state);
         
-        // Build complete system prompt with synopsis and recent exchanges
-        String systemPrompt = promptBuilder.buildVoidPrompt(state);
+        String systemPrompt = promptBuilder.buildVoidPromptFromContext(context);
         
-        // Use narrative model for Erik with simple call
         String response = llmClient.call(
             ModelType.NARRATIVE, 
             systemPrompt, 
-            userInput  // Only current user input
+            userInput
         );
         
         state.getVoidHistory().addUserMessage(userInput);
@@ -158,11 +159,48 @@ public class SessionFlowService {
 
     // ========== STANZA MODE ==========
 
+    
+    void handleStanza(String userInput, SessionState state) {
+        try {
+            String narration = callNarrator(state, userInput);
+            message = "\n[Narration] " + narration;
+            
+        } catch (Exception e) {
+            log.error("Error in stanza mode", e);
+            handleError(e);
+            message = "\n[System] An error occurred. Please try again.\n";
+        }
+    }
+    
+    String callNarrator(SessionState state, String userInput) throws Exception {
+        
+        SessionContext context = sessionAssembler.assembleForStanza(state);
+        
+        String systemPrompt = promptBuilder.buildStanzaPromptFromContext(context);
+        
+        String response = llmClient.call(
+            ModelType.NARRATIVE, 
+            systemPrompt, 
+            userInput
+        );
+        
+        state.getStanzaHistory().addUserMessage(userInput);
+        state.getStanzaHistory().addAssistantMessage(response);
+        
+        try {
+            synopsisGenerator.generateSynopsis(state.getStanzaHistory());
+        } catch (Exception e) {
+            log.warn("Failed to generate synopsis", e);
+        }
+        
+        return response;
+    }
+    
     void startStanza(String userInput, SessionState state) {
         if (state.isInStanzaMode()) {
         	message = "[System] Already in stanza mode.\n";
             log.warn("Attempt to start stanza while already in stanza mode");
-            return;
+            return; 
         }
         if (state.getStanzaStatus() == StanzaStatus.COMPLETED) {
             message = "\n[System] You've already completed a stanza this session.\n"
@@ -175,8 +213,12 @@ public class SessionFlowService {
         log.info("Starting new stanza");
         StringBuilder builder = new StringBuilder();
         
+        
         try {
         	
+        	state.setCompletedStanza(null);
+        	
+        	state.enterStanzaMode();
         	state.setStanzaStatus(StanzaStatus.ACTIVE);
 	        String erikResponse = callErik(state, userInput);
 	        builder.append("\n[Erik] " + erikResponse);
@@ -184,10 +226,23 @@ public class SessionFlowService {
 	        
 	        log.debug("Extracting stanza details...");
         
-            StanzaSetup setup = stanzaExtractor.extract(state.getVoidHistory());
-            state.setCurrentStanza(setup);
-            state.getVoidHistory().clearHistory();
-            state.enterStanzaMode();
+	        StanzaMetadata setup;
+
+	        if (state.hasLoadedStanzaMemory()) {
+	            log.info("Starting stanza from loaded memory");
+	            setup = convertRecordToMetadata(state.getLoadedStanzaMemory());
+	            
+	            String changes = synopsisGenerator.generatePauseChanges(state.getVoidHistory());
+	            if (changes != null && !changes.isBlank()) {
+	                setup.getSpecialRules().add("USER REQUESTED CHANGES: " + changes);
+	            }
+	            
+	            state.setLoadedStanzaMemory(null);
+	        } else {
+	            setup = stanzaExtractor.extractFromVoidHistory(state.getVoidHistory());
+	        }
+
+	        state.setCurrentStanza(setup);
             
             // System message
             builder.append("[STANZA START]\n");
@@ -208,45 +263,6 @@ public class SessionFlowService {
         }
     }
     
-    void handleStanza(String userInput, SessionState state) {
-        try {
-            String narration = callNarrator(state, userInput);
-            message = "\n[Narration] " + narration;
-            
-        } catch (Exception e) {
-            log.error("Error in stanza mode", e);
-            handleError(e);
-            message = "\n[System] An error occurred. Please try again.\n";
-        }
-    }
-    
-    /**
-     * Call Narrator with complete system prompt (synopsis + recent exchanges included)
-     * Uses simple call(), not callWithHistory()
-     */
-    String callNarrator(SessionState state, String userInput) throws Exception {
-        
-        // Build complete system prompt with synopsis and recent exchanges
-        String systemPrompt = promptBuilder.buildStanzaPrompt(state.getCurrentStanza(), state);
-        
-        // Use narrative model for narrator with simple call
-        String response = llmClient.call(
-            ModelType.NARRATIVE, 
-            systemPrompt, 
-            userInput  // Only current user input
-        );
-        
-        state.getStanzaHistory().addUserMessage(userInput);
-        state.getStanzaHistory().addAssistantMessage(response);
-        
-        try {
-            synopsisGenerator.generateSynopsis(state.getStanzaHistory());
-        } catch (Exception e) {
-            log.warn("Failed to generate synopsis", e);
-        }
-        
-        return response;
-    }
     
     void pauseStanza(String pauseMessage, SessionState state) {
         if (state.isInVoidMode()) {
@@ -281,15 +297,18 @@ public class SessionFlowService {
         try {
             // Get closing narration with user's actual input
             String closure = callNarrator(state, 
-                userInput + " ((Provide a gentle closing or resolution for this scene, bringing it to a natural end point.))");
+                userInput + " ((Bring the scene to a natural closing moment. NARRATION ONLY - no meta-commentary, no epilogue notes, no analysis. Just the final narrative moment.))");
             builder.append("\n[Narration - Closing] ");
             builder.append(closure);
         
             state.enterVoidMode();
             
+            StanzaMetadata setup = stanzaExtractor.extractFromStanzaHistory(state.getStanzaHistory());
+            state.setCurrentStanza(setup);
+            
             CompletedStanza completed = createCompletedStanza(state);
             state.setCompletedStanza(completed);
-            state.setStanzaStatus(StanzaStatus.COMPLETED);
+            state.setStanzaStatus(StanzaStatus.COMPLETED);          
             
             saveStanzaToDb(completed,state.getCurrentStanza());
             
@@ -317,28 +336,8 @@ public class SessionFlowService {
             message = "[System] Failed to end stanza.\n";
             state.enterStanzaMode();
         }
-    }
-    
-    @Transactional
-    private void saveStanzaToDb(CompletedStanza completed, StanzaSetup stanzaSetup) {
-    	try {
-			Persona personaEntity = personaRepository.findAll().get(0);
-			
-			StanzaRecord stanzaRecordEntity = new StanzaRecord(personaEntity, completed.getQuickSynopsis(), completed.getDetailedSynopsis() );
-			stanzaRecordEntity.setPremise(stanzaSetup.getPremise());
-			stanzaRecordEntity.setSetting(stanzaSetup.getSetting());
-			stanzaRecordEntity.setTone(stanzaSetup.getTone());
-			stanzaRecordEntity.setUserRole(stanzaSetup.getUserRole());
-			stanzaRecordEntity.setUserBackstory(stanzaSetup.getUserBackstory());
-			stanzaRecordEntity.setCharacters(stanzaSetup.getCharacters());
-			stanzaRecordEntity.setSpecialRules(stanzaSetup.getSpecialRules());
-			stanzaRecordRepository.save(stanzaRecordEntity);
-			
-			log.info("Stanza saved to database successfully");
-		} catch (Exception e) {
-			log.error("Failed to save stanza to database", e);
-		}	
-	}
+    }   
+
 
 	private void abandonStanza(SessionState state, String userInput) {
         if (state.isInVoidMode()) {
@@ -364,8 +363,6 @@ public class SessionFlowService {
             builder.append("\n");
             
             state.setCurrentStanza(null);
-            state.setCompletedStanza(null);
-            state.setStanzaStatus(StanzaStatus.NONE);
             
             message = builder.toString();
             log.info("Stanza abandoned successfully");
@@ -386,17 +383,8 @@ public class SessionFlowService {
             handleError(e);
         }
         
-        String detailedSynopsis = "";
-        try {
-            detailedSynopsis = synopsisGenerator.generateDetailedSynopsis(state.getStanzaHistory());
-        } catch (Exception e) {
-            log.error("Failed to generate detailed synopsis", e);
-            handleError(e);
-        }
-        
         CompletedStanza completed = new CompletedStanza(
             quickSynopsis, 
-            detailedSynopsis, 
             state.getCurrentStanza()
         );
         state.getStanzaHistory().clearHistory();
@@ -434,6 +422,44 @@ public class SessionFlowService {
             state.enterVoidMode();
         }
     }
+    
+    private StanzaMetadata convertRecordToMetadata(StanzaRecord record) {
+        StanzaMetadata metadata = new StanzaMetadata();
+        metadata.setSetting(record.getSetting() != null ? record.getSetting() : "");
+        metadata.setPremise(record.getPremise() != null ? record.getPremise() : "");
+        metadata.setUserRole(record.getUserRole() != null ? record.getUserRole() : "");
+        metadata.setUserBackstory(record.getUserBackStory() != null ? record.getUserBackStory() : "");
+        metadata.setTone(record.getTone() != null ? record.getTone() : "");
+        metadata.setCharacters(record.getCharacters() != null ? new ArrayList<>(record.getCharacters()) : new ArrayList<>());
+        metadata.setSpecialRules(record.getSpecialRules() != null ? new ArrayList<>(record.getSpecialRules()) : new ArrayList<>());
+        metadata.setPreviousEvents(record.getPreviousEvents() != null ? new ArrayList<>(record.getPreviousEvents()) : new ArrayList<>());
+        return metadata;
+    }
+    
+    // ========== DB HANDLING ==========
+    
+    @Transactional
+    private void saveStanzaToDb(CompletedStanza completed, StanzaMetadata stanzaMetadata) {
+    	try {
+			Persona personaEntity = personaRepository.findAll().get(0);
+			
+			StanzaRecord stanzaRecordEntity = new StanzaRecord(personaEntity, completed.getQuickSynopsis());
+			stanzaRecordEntity.setPremise(stanzaMetadata.getPremise());
+			stanzaRecordEntity.setSetting(stanzaMetadata.getSetting());
+			stanzaRecordEntity.setTone(stanzaMetadata.getTone());
+			stanzaRecordEntity.setUserRole(stanzaMetadata.getUserRole());
+			stanzaRecordEntity.setUserBackstory(stanzaMetadata.getUserBackstory());
+			stanzaRecordEntity.setCharacters(stanzaMetadata.getCharacters());
+			stanzaRecordEntity.setPreviousEvents(stanzaMetadata.getPreviousEvents());
+			stanzaRecordEntity.setSpecialRules(stanzaMetadata.getSpecialRules());
+			stanzaRecordRepository.save(stanzaRecordEntity);
+			
+			log.info("Stanza saved to database successfully");
+		} catch (Exception e) {
+			log.error("Failed to save stanza to database", e);
+		}	
+	}
+    
 
     // ========== ERROR HANDLING ==========
 
