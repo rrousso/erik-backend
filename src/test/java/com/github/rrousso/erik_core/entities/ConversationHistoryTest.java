@@ -9,6 +9,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import com.github.rrousso.erik_core.domain.models.ConversationHistory;
+
 public class ConversationHistoryTest {
 	
     private ConversationHistory history;

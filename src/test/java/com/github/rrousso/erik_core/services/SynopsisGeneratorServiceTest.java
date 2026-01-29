@@ -11,8 +11,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.github.rrousso.erik_core.entities.ConversationHistory;
-import com.github.rrousso.erik_core.entities.ModelType;
+import com.github.rrousso.erik_core.domain.enums.ModelType;
+import com.github.rrousso.erik_core.domain.models.ConversationHistory;
+import com.github.rrousso.erik_core.services.config.ConfigService;
+import com.github.rrousso.erik_core.services.llm.LLMClientService;
+import com.github.rrousso.erik_core.services.prompt.SystemPromptBuilderService;
+import com.github.rrousso.erik_core.services.session.SynopsisGeneratorService;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Synopsis Generator Service Test")

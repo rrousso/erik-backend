@@ -1,10 +1,11 @@
 package com.github.rrousso.erik_core.controllers;
 
-import com.github.rrousso.erik_core.entities.CommandResult;
-import com.github.rrousso.erik_core.entities.SessionState;
-import com.github.rrousso.erik_core.services.CommandService;
-import com.github.rrousso.erik_core.services.ConfigService;
-import com.github.rrousso.erik_core.services.SessionFlowService;
+import com.github.rrousso.erik_core.domain.models.SessionState;
+import com.github.rrousso.erik_core.domain.valueobjects.CommandResult;
+import com.github.rrousso.erik_core.services.command.CommandService;
+import com.github.rrousso.erik_core.services.config.ConfigService;
+import com.github.rrousso.erik_core.services.orchestration.SessionFlowService;
+
 import org.springframework.stereotype.Component;
 
 import java.util.Scanner;

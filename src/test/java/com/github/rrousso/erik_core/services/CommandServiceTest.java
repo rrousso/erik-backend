@@ -14,25 +14,26 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.github.rrousso.erik_core.entities.CommandResult;
-import com.github.rrousso.erik_core.entities.SessionState;
-import com.github.rrousso.erik_core.entities.StanzaRecord;
-import com.github.rrousso.erik_core.entities.Persona;
-import com.github.rrousso.erik_core.repositories.StanzaRecordRepository;
+import com.github.rrousso.erik_core.domain.models.SessionState;
+import com.github.rrousso.erik_core.domain.valueobjects.CommandResult;
+import com.github.rrousso.erik_core.persistence.entities.Persona;
+import com.github.rrousso.erik_core.services.command.CommandService;
+import com.github.rrousso.erik_core.persistence.entities.Stanza;
+import com.github.rrousso.erik_core.persistence.repositories.StanzaRepository;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Command Service Tests")
 public class CommandServiceTest {
 
     @Mock
-    private StanzaRecordRepository stanzaRecordRepository;
+    private StanzaRepository stanzaRepository;
     
     private CommandService commandService;
     private SessionState state;
     
     @BeforeEach
     void setUp() {
-        commandService = new CommandService(stanzaRecordRepository);
+        commandService = new CommandService(stanzaRepository);
         state = new SessionState();
     }
     
@@ -82,7 +83,7 @@ public class CommandServiceTest {
     @Test
     @DisplayName("Should handle /list command with no stanzas")
     void shouldHandleListCommandWithNoStanzas() {
-        when(stanzaRecordRepository.findAll()).thenReturn(Collections.emptyList());
+        when(stanzaRepository.findAll()).thenReturn(Collections.emptyList());
         
         CommandResult result = commandService.processCommand("/list", state);
         
@@ -93,8 +94,8 @@ public class CommandServiceTest {
     @Test
     @DisplayName("Should handle /list command with stanzas")
     void shouldHandleListCommandWithStanzas() {
-        StanzaRecord stanza = createTestStanza(1L, "Haunted mansion", "Ghost investigation");
-        when(stanzaRecordRepository.findAll()).thenReturn(Arrays.asList(stanza));
+        Stanza stanza = createTestStanza(1L, "Haunted mansion", "Ghost investigation");
+        when(stanzaRepository.findAll()).thenReturn(Arrays.asList(stanza));
         
         CommandResult result = commandService.processCommand("/list", state);
         
@@ -118,8 +119,6 @@ public class CommandServiceTest {
     @Test
     @DisplayName("Should handle /search command with no matches")
     void shouldHandleSearchCommandWithNoMatches() {
-        StanzaRecord stanza = createTestStanza(1L, "Haunted mansion", "Ghost investigation");
-        when(stanzaRecordRepository.findAll()).thenReturn(Arrays.asList(stanza));
         
         CommandResult result = commandService.processCommand("/search vampire", state);
         
@@ -130,30 +129,26 @@ public class CommandServiceTest {
     @Test
     @DisplayName("Should handle /search command with matches")
     void shouldHandleSearchCommandWithMatches() {
-        StanzaRecord stanza1 = createTestStanza(1L, "Haunted mansion", "Ghost investigation");
-        StanzaRecord stanza2 = createTestStanza(2L, "Vampire castle", "Romance with vampire");
-        when(stanzaRecordRepository.findAll()).thenReturn(Arrays.asList(stanza1, stanza2));
+        Stanza stanza2 = createTestStanza(2L, "Vampire castle", "Romance with vampire");
+        when(stanzaRepository.fullTextSearch("vampire")).thenReturn(Arrays.asList(stanza2));
         
         CommandResult result = commandService.processCommand("/search vampire", state);
         
         assertTrue(result.wasHandled());
         assertTrue(result.getResponse().contains("SEARCH RESULTS"));
         assertTrue(result.getResponse().contains("Vampire castle"));
-        assertFalse(result.getResponse().contains("Haunted mansion"));
     }
     
     @Test
     @DisplayName("Should handle /search with multiple keywords (AND logic)")
     void shouldHandleSearchWithMultipleKeywords() {
-        StanzaRecord stanza1 = createTestStanza(1L, "Vampire castle", "Horror investigation");
-        StanzaRecord stanza2 = createTestStanza(2L, "Vampire beach", "Romance with vampire");
-        when(stanzaRecordRepository.findAll()).thenReturn(Arrays.asList(stanza1, stanza2));
+        Stanza stanza2 = createTestStanza(2L, "Vampire beach", "Romance with vampire");
+        when(stanzaRepository.fullTextSearch("vampire & romance")).thenReturn(Arrays.asList(stanza2));
         
         CommandResult result = commandService.processCommand("/search vampire romance", state);
         
         assertTrue(result.wasHandled());
         assertTrue(result.getResponse().contains("Vampire beach"));
-        assertFalse(result.getResponse().contains("Vampire castle")); // No "romance" keyword
     }
     
     // ========== LOAD COMMAND ==========
@@ -179,7 +174,7 @@ public class CommandServiceTest {
     @Test
     @DisplayName("Should handle /load command with non-existent ID")
     void shouldHandleLoadCommandWithNonExistentId() {
-        when(stanzaRecordRepository.findById(999L)).thenReturn(Optional.empty());
+        when(stanzaRepository.findById(999L)).thenReturn(Optional.empty());
         
         CommandResult result = commandService.processCommand("/load 999", state);
         
@@ -190,8 +185,8 @@ public class CommandServiceTest {
     @Test
     @DisplayName("Should handle /load command successfully")
     void shouldHandleLoadCommandSuccessfully() {
-        StanzaRecord stanza = createTestStanza(5L, "Haunted mansion", "Ghost investigation");
-        when(stanzaRecordRepository.findById(5L)).thenReturn(Optional.of(stanza));
+        Stanza stanza = createTestStanza(5L, "Haunted mansion", "Ghost investigation");
+        when(stanzaRepository.findById(5L)).thenReturn(Optional.of(stanza));
         
         CommandResult result = commandService.processCommand("/load 5", state);
         
@@ -218,7 +213,7 @@ public class CommandServiceTest {
     @Test
     @DisplayName("Should handle /clear command successfully")
     void shouldHandleClearCommandSuccessfully() {
-        StanzaRecord stanza = createTestStanza(5L, "Haunted mansion", "Ghost investigation");
+        Stanza stanza = createTestStanza(5L, "Haunted mansion", "Ghost investigation");
         state.setLoadedStanzaMemory(stanza);
         
         CommandResult result = commandService.processCommand("/clear", state);
@@ -251,16 +246,17 @@ public class CommandServiceTest {
     
     // ========== HELPER METHODS ==========
     
-    private StanzaRecord createTestStanza(Long id, String setting, String premise) {
-        Persona persona = new Persona("Test", "they/them", "description", "details");
-        persona.setId(1L);
+    private Stanza createTestStanza(Long id, String setting, String premise) {
+        Persona testPersona = new Persona();
+        testPersona.setId(1L);
+        testPersona.setName("Test User");
         
-        StanzaRecord stanza = new StanzaRecord(persona, "Quick synopsis for " + premise);
+        Stanza stanza = new Stanza(testPersona, "test_world");
         stanza.setId(id);
         stanza.setSetting(setting);
         stanza.setPremise(premise);
-        stanza.setTone("horror");
-        
+        stanza.setTone("Horror");
+        stanza.setQuickSynopsis("A test synopsis");
         return stanza;
     }
 }

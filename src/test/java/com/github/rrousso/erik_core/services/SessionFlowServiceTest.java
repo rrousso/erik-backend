@@ -17,14 +17,23 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.github.rrousso.erik_core.entities.Flag;
-import com.github.rrousso.erik_core.entities.ModelType;
-import com.github.rrousso.erik_core.entities.SessionContext;
-import com.github.rrousso.erik_core.entities.SessionState;
-import com.github.rrousso.erik_core.entities.StanzaMetadata;
-import com.github.rrousso.erik_core.entities.StanzaStatus;
-import com.github.rrousso.erik_core.repositories.PersonaRepository;
-import com.github.rrousso.erik_core.repositories.StanzaRecordRepository;
+import com.github.rrousso.erik_core.domain.enums.Flag;
+import com.github.rrousso.erik_core.domain.enums.ModelType;
+import com.github.rrousso.erik_core.domain.enums.StanzaStatus;
+import com.github.rrousso.erik_core.domain.models.SessionContext;
+import com.github.rrousso.erik_core.domain.models.SessionState;
+import com.github.rrousso.erik_core.dto.initialization.InitializedStanza;
+import com.github.rrousso.erik_core.persistence.repositories.PersonaRepository;
+import com.github.rrousso.erik_core.persistence.repositories.StanzaRecordRepository;
+import com.github.rrousso.erik_core.services.llm.FlagDetectorService;
+import com.github.rrousso.erik_core.services.llm.LLMClientService;
+import com.github.rrousso.erik_core.services.orchestration.SessionFlowService;
+import com.github.rrousso.erik_core.services.prompt.SystemPromptBuilderService;
+import com.github.rrousso.erik_core.services.session.SessionAssemblerService;
+import com.github.rrousso.erik_core.services.session.SynopsisGeneratorService;
+import com.github.rrousso.erik_core.services.stanza.StanzaExtractionService;
+import com.github.rrousso.erik_core.services.stanza.StanzaInitializationService;
+import com.github.rrousso.erik_core.services.stanza.StanzaPersistenceService;
 
 
 @ExtendWith(MockitoExtension.class)
@@ -38,16 +47,15 @@ public class SessionFlowServiceTest {
     private SystemPromptBuilderService promptBuilder;
     
 	@Mock
-	private StanzaExtractorService stanzaExtractor;
-    
-	@Mock
 	private SynopsisGeneratorService synopsisGenerator;
     
 	@Mock
 	private FlagDetectorService flagDetector;
 	
+	@Mock
     private PersonaRepository personaRepository;
     
+	@Mock
     private StanzaRecordRepository stanzaRecordRepository;
 	
 	private SessionFlowService sessionFlowService;
@@ -55,11 +63,32 @@ public class SessionFlowServiceTest {
 	@Mock
 	private SessionAssemblerService sessionAssembler;
 	
+	@Mock
+	private StanzaInitializationService initializationService;
+	
+	@Mock
+	private StanzaPersistenceService persistenceService;
+	
+	@Mock
+	private StanzaExtractionService extractionService;
+	
 	private SessionState state;
 	
 	@BeforeEach
 	void setUp() {
-		sessionFlowService = new SessionFlowService(llmClient, promptBuilder, stanzaExtractor, synopsisGenerator, flagDetector, sessionAssembler, personaRepository, stanzaRecordRepository);
+		// Updated constructor - removed stanzaExtractor, added persistenceService
+		sessionFlowService = new SessionFlowService(
+			llmClient, 
+			promptBuilder, 
+			synopsisGenerator, 
+			flagDetector, 
+			sessionAssembler, 
+			personaRepository, 
+			stanzaRecordRepository, 
+			initializationService,
+			persistenceService,
+			extractionService
+		);
 		state = new SessionState();
 	}
 	
@@ -97,8 +126,7 @@ public class SessionFlowServiceTest {
 	@Test
 	@DisplayName("Should start stanza in void mode on Start input")
 	void shouldStartStanzaInVoidModeOnStartInput() throws Exception{
-		StanzaMetadata setup = new StanzaMetadata();
-        setup.setSetting("Cinderella story");	
+		InitializedStanza init = new InitializedStanza();
         
     	when(flagDetector.detect(
     			eq("Let's begin!"),
@@ -119,7 +147,7 @@ public class SessionFlowServiceTest {
     	when(promptBuilder.buildVoidPromptFromContext(eq(context)))
     	.thenReturn("Void Prompt");
     	
-    	when(stanzaExtractor.extractFromVoidHistory(any())).thenReturn(setup);
+    	when(initializationService.initializeFromPlanning(any())).thenReturn(init);
 
     	when(promptBuilder.buildStanzaPromptFromContext(eq(context)))
     	.thenReturn("Stanza Prompt");
@@ -184,11 +212,12 @@ public class SessionFlowServiceTest {
 	@DisplayName("Should continue stanza in void mode on Continue input")
 	void shouldContinueStanzaInVoidModeOnContinueInput() throws Exception{
 		
-		StanzaMetadata setup = new StanzaMetadata();
-        setup.setSetting("Cinderella story");
+		// Use InitializedStanza instead of old StanzaMetadata
+		InitializedStanza initialized = new InitializedStanza();
+		initialized.setWorldIdentifier("cinderella_story");
 		
 		state.setStanzaStatus(StanzaStatus.PAUSED);
-		state.setCurrentStanza(setup);		
+		state.setInitializedStanza(initialized);  // Changed from setCurrentStanza
 		
         SessionContext context = SessionContext.builder()
                 .mode(SessionState.Mode.VOID)
@@ -205,6 +234,10 @@ public class SessionFlowServiceTest {
     	
     	when(promptBuilder.buildStanzaPromptFromContext(eq(context)))
     	.thenReturn("Stanza Prompt");
+    	
+    	// Mock synopsisGenerator.generatePauseChanges since continueStanza calls it
+    	when(synopsisGenerator.generatePauseChanges(any()))
+    	.thenReturn("User wants to change direction");
 
         when(llmClient.call(
                 eq(ModelType.NARRATIVE),
@@ -221,12 +254,13 @@ public class SessionFlowServiceTest {
 	@Test
 	@DisplayName("Should end stanza in Stanza mode on End input")
 	void shouldEndStanzaInStanzaModeOnEndInput() throws Exception{
-		StanzaMetadata setup = new StanzaMetadata();
-        setup.setSetting("Cinderella story");
+		// Use InitializedStanza instead of old StanzaMetadata
+		InitializedStanza initialized = new InitializedStanza();
+		initialized.setWorldIdentifier("cinderella_story");
         
 		state.enterStanzaMode();
 		state.setStanzaStatus(StanzaStatus.ACTIVE);
-		state.setCurrentStanza(setup);	
+		state.setInitializedStanza(initialized);  // Changed from setCurrentStanza
 		
         SessionContext context = SessionContext.builder()
                 .mode(SessionState.Mode.STANZA)
@@ -273,12 +307,13 @@ public class SessionFlowServiceTest {
 	@Test
 	@DisplayName("Should abandon stanza in Stanza mode on Abandon input")
 	void shouldAbandonStanzaInStanzaModeOnAbandonInput() throws Exception{
-		StanzaMetadata setup = new StanzaMetadata();
-        setup.setSetting("Cinderella story");
+		// Use InitializedStanza instead of old StanzaMetadata
+		InitializedStanza initialized = new InitializedStanza();
+		initialized.setWorldIdentifier("cinderella_story");
         
 		state.enterStanzaMode();
 		state.setStanzaStatus(StanzaStatus.ACTIVE);
-		state.setCurrentStanza(setup);	
+		state.setInitializedStanza(initialized);  // Changed from setCurrentStanza
 		
         SessionContext context = SessionContext.builder()
                 .mode(SessionState.Mode.STANZA)
@@ -306,7 +341,7 @@ public class SessionFlowServiceTest {
         assertTrue(message.contains("[Erik] Do you want to start a new one?"));
         assertEquals(StanzaStatus.ABANDONED, state.getStanzaStatus());
         assertTrue(state.isInVoidMode());
-        assertNull(state.getCurrentStanza());
+        assertNull(state.getInitializedStanza());  // Changed from getCurrentStanza
         assertNotNull(state.getCompletedStanza());
 	}
 	

@@ -7,10 +7,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.github.rrousso.erik_core.entities.Flag;
-import com.github.rrousso.erik_core.entities.ModelType;
-import com.github.rrousso.erik_core.entities.SessionState;
-import com.github.rrousso.erik_core.entities.StanzaStatus;
+import com.github.rrousso.erik_core.domain.enums.Flag;
+import com.github.rrousso.erik_core.domain.enums.ModelType;
+import com.github.rrousso.erik_core.domain.enums.StanzaStatus;
+import com.github.rrousso.erik_core.domain.models.SessionState;
+import com.github.rrousso.erik_core.services.llm.FlagDetectorService;
+import com.github.rrousso.erik_core.services.llm.LLMClientService;
+import com.github.rrousso.erik_core.services.prompt.SystemPromptBuilderService;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;

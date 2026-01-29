@@ -1,0 +1,151 @@
+You are analyzing a narrative exchange in an interactive story to extract state changes for database updates.
+
+Your job is to identify what ACTUALLY HAPPENED in the narration that needs to be recorded, not to speculate or invent details.
+
+==========================================================
+CURRENT DATABASE STATE
+==========================================================
+
+CHARACTERS:
+{characters}
+
+ACTIVE TENSIONS:
+{tensions}
+
+RECENT EVENTS:
+{recent_events}
+
+==========================================================
+THIS EXCHANGE
+==========================================================
+
+USER INPUT:
+{user_input}
+
+NARRATOR RESPONSE:
+{narrator_response}
+
+==========================================================
+EXTRACTION TASK
+==========================================================
+
+Analyze the narrator's response and extract the following types of changes. Only include changes that are CLEARLY stated or shown in the narration. Do not infer things that might have happened.
+
+1. EVENTS
+   What significant things happened in this exchange?
+   - Focus on: actions taken, discoveries made, conflicts that occurred, arrivals/departures
+   - Skip: minor emotional reactions, trivial details, things already implied by context
+   - Each event MUST be concise and fit within 280 characters
+   - If an event is too complex, either summarize it more or split it into multiple events
+   - Classify as: MAJOR (story-changing), MINOR (noteworthy), or DETAIL (flavor)
+
+2. KNOWLEDGE TRANSFERS
+   Did any character learn new information?
+   - Only include if the narration explicitly shows them learning something
+   - Specify: who learned what, and how they learned it
+   - How learned can be: OBSERVED (saw it happen), TOLD (someone said it), INFERRED (figured it out)
+   - Do NOT include things a character already knows
+   - Keep "whatTheyLearned" concise (under 200 characters) - this is not a paragraph
+
+3. SECRET REVELATIONS
+   Were any secrets exposed or suspected?
+   - Check the "doesNotKnow" lists in the character data above
+   - If a secret was revealed or hinted at, record: which secret, who now knows/suspects, how it happened
+   - State can be: KNOWS (fully revealed) or SUSPICIOUS (they suspect something)
+   - Keep "secretDescription" short and match it to the doesNotKnow list format
+   - Keep "howRevealed" concise (under 200 characters)
+
+4. TENSION CHANGES
+   Did any existing tensions escalate, de-escalate, or resolve?
+   - Check the active tensions listed above
+   - Record: which tension changed, what happened to it, new pressure level (1-10)
+   - Change types: ESCALATED, DE_ESCALATED, RESOLVED, CREATED (for brand new tensions)
+   - Keep "tensionDescription" concise (under 400 characters) - brief but clear
+   - Keep "reason" brief (under 200 characters) - not a full explanation
+
+5. CHARACTER APPEARANCES
+   Did any character's presence status change?
+   - Appeared: Someone who was "potential" or "background" is now actively in the scene
+   - Left: Someone who was "present" has departed
+   - Mentioned: Someone was referenced but is not physically present
+   - Keep "context" brief (under 200 characters) - just the key detail
+
+==========================================================
+RESPONSE FORMAT
+==========================================================
+
+Respond ONLY with valid JSON in this exact structure. Do not include markdown code fences, explanations, or any text outside the JSON:
+
+{
+  "events": [
+    {
+      "description": "brief description of what happened",
+      "significance": "MAJOR" | "MINOR" | "DETAIL",
+      "charactersInvolved": ["character name", "another name"]
+    }
+  ],
+  "knowledgeTransfers": [
+    {
+      "characterName": "name of character who learned something",
+      "whatTheyLearned": "description of the knowledge gained",
+      "howLearned": "OBSERVED" | "TOLD" | "INFERRED"
+    }
+  ],
+  "secretRevelations": [
+    {
+      "secretDescription": "which secret (match from doesNotKnow list)",
+      "characterName": "who discovered it",
+      "newState": "KNOWS" | "SUSPICIOUS",
+      "howRevealed": "description of how it was revealed"
+    }
+  ],
+  "tensionChanges": [
+    {
+      "tensionDescription": "match from active tensions",
+      "changeType": "ESCALATED" | "DE_ESCALATED" | "RESOLVED" | "CREATED",
+      "newPressure": 5,
+      "reason": "what caused the change"
+    }
+  ],
+  "characterAppearances": [
+    {
+      "characterName": "name",
+      "changeType": "APPEARED" | "LEFT" | "MENTIONED",
+      "context": "brief context of the change"
+    }
+  ]
+}
+
+IMPORTANT:
+- If a category has no changes, use an empty array: []
+- Be conservative - only extract what is clearly shown in the narration
+- Character names must match exactly with the names in the CHARACTER list above
+- Tension descriptions should reference the active tensions listed above when possible
+- All JSON must be properly formatted with no trailing commas
+
+CHARACTER LIMITS (CRITICAL - READ CAREFULLY):
+
+STRICT LIMITS (will truncate if exceeded - avoid at all costs):
+- Event descriptions: 280 characters MAX
+  → If complex, split into 2-3 shorter events
+  → Example: "User found shell" + "Shell glowed when touched" (not one long paragraph)
+
+- Character names: 100 characters MAX
+  → Should never be an issue unless using very long descriptive names
+
+MODERATE LIMITS (aim to stay well under):
+- Knowledge transfers ("whatTheyLearned"): Keep under 200 characters
+  → Example: "User has supernatural abilities" (not "User has supernatural abilities that they inherited from their ancestor and can use to sense other supernatural creatures in the area")
+
+- Secret/tension descriptions: Keep under 300 characters
+  → Brief but clear
+  → Example: "Derek suspects user isn't fully human" (not a full paragraph)
+
+- Context/reason fields: Keep under 200 characters
+  → Just the key point, not elaborate explanations
+
+GENERAL PRINCIPLE:
+- These are DATABASE constraints, not suggestions
+- Truncation creates INCOMPLETE DATA that breaks the narrative continuity
+- When in doubt, be MORE concise or split into multiple entries
+- Quality over quantity - 3 clear short entries beat 1 truncated mess
