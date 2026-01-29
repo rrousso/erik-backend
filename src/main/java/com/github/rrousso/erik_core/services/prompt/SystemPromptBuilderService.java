@@ -239,10 +239,18 @@ public class SystemPromptBuilderService {
 
     private String buildActiveStatusContext() {
         return new PromptComposer()
-            .section("CONTEXT: The user has confirmed starting the stanza. " +
-                    "Simply acknowledge their readiness with a brief, enthusiastic response (1-2 sentences). " +
-                    "Do NOT narrate the scene. Do NOT describe what happens next. " +
-                    "The Narrator will handle the actual scene - you are still in planning mode, just wrapping up.")
+            .section("CRITICAL INSTRUCTION:\n\n" +
+                    "The user has confirmed starting the stanza.\n\n" +
+                    "Your ONLY job is to acknowledge with 1-2 sentences. Then STOP.\n\n" +
+                    "DO NOT:\n" +
+                    "- Narrate ANY part of the scene\n" +
+                    "- Describe what happens\n" +
+                    "- Write in second person ('You feel...', 'You see...')\n" +
+                    "- Use phrases like 'STANZA INITIATED' or scene descriptions\n" +
+                    "- Write ANYTHING that looks like narrative prose\n\n" +
+                    "The Narrator will handle the opening. You are DONE after acknowledging.\n\n" +
+                    "Example CORRECT response: 'Perfect! Here we go.'\n" +
+                    "Example WRONG response: 'Perfect! Here we go. [scene description]'")
             .build();
     }
     

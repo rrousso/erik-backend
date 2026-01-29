@@ -174,20 +174,20 @@ public class SessionFlowService {
             
             Long stanzaId = state.getActiveStanzaId();
             
-            // Increment exchange counter in DB after each exchange
+            // Load stanza once, do all updates in memory, save once
             if (stanzaId != null) {
                 try {
-                    persistenceService.incrementExchange(stanzaId);
+                    Stanza stanza = persistenceService.loadStanzaWithRelationships(stanzaId);
+                    
+                    stanza.incrementExchange();
+                    
+                    extractionService.extractAndUpdate(stanza, userInput, narration);
+                    
+                    persistenceService.save(stanza);
+                    
                 } catch (Exception e) {
-                    log.warn("Failed to increment exchange counter", e);
-                }
-                
-                // NEW: Extract and update state from the narrative exchange
-                try {
-                    extractionService.extractAndUpdate(stanzaId, userInput, narration);
-                } catch (Exception e) {
-                    log.warn("Failed to extract state changes", e);
-                    // Don't fail the whole exchange if extraction fails
+                    log.warn("Failed to update stanza state", e);
+                    // Don't fail the whole exchange if state update fails
                 }
             }
             
@@ -253,8 +253,11 @@ public class SessionFlowService {
             log.debug("Extracting stanza details...");
 
             // Initialize stanza from planning conversation
-            InitializedStanza initialized = initializationService.initializeFromPlanning(state.getVoidHistory());
-            state.setInitializedStanza(initialized);
+            Stanza loadedStanza = state.getLoadedStanzaMemory();
+            InitializedStanza initialized = initializationService.initializeFromPlanning(
+                state.getVoidHistory(), 
+                loadedStanza
+            );
             
             // NEW: Persist to database and store the ID
             try {
@@ -347,24 +350,25 @@ public class SessionFlowService {
             CompletedStanza completed = createCompletedStanza(state);
             state.setCompletedStanza(completed);
             state.setStanzaStatus(StanzaStatus.COMPLETED);   
-            
             Long stanzaId = state.getActiveStanzaId();
-            if (stanzaId == null) {
-                log.error("Stanza was saved but ID is null - this shouldn't happen");
-            } else {
-                state.setActiveStanzaId(stanzaId);
-                log.info("Stanza persisted to database with ID: {}", stanzaId);
-            }
-            
-            // NEW: Update database with final status and synopsis
-            if (stanzaId != null) {
-                try {
-                    persistenceService.updateStatus(stanzaId, "completed");
-                    persistenceService.setQuickSynopsis(stanzaId, completed.getQuickSynopsis());
-                    log.info("Stanza completion saved to database");
-                } catch (Exception e) {
-                    log.warn("Failed to update completed stanza in database", e);
-                }
+            if(stanzaId != null) {
+	            try {   
+		           
+		            Stanza stanza = persistenceService.loadStanzaWithRelationships(stanzaId);
+		 
+		            stanza.incrementExchange();
+	
+		            extractionService.extractAndUpdate(stanza, userInput, closure); 
+	
+		            stanza.setStatus("completed");
+	
+		            stanza.setQuickSynopsis(completed.getQuickSynopsis());
+	
+		            persistenceService.save(stanza);  // ← Single database write
+	
+	            } catch (Exception e) {
+	                log.warn("Failed to update completed stanza in database", e);
+	            }
             }
             
             builder.append("\n\n[STANZA END]\n");

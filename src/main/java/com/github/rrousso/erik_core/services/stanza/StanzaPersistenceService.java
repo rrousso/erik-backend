@@ -124,6 +124,11 @@ public class StanzaPersistenceService {
         return saved;
     }
     
+    @Transactional
+    public Stanza save(@NonNull Stanza stanza) {
+        return stanzaRepository.save(stanza);
+    }
+    
     // ========== ENTITY CREATION METHODS ==========
     
     /**

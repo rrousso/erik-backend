@@ -142,7 +142,7 @@ public class SessionFlowServiceTest {
     	when(promptBuilder.buildVoidPromptFromContext(eq(context)))
     	.thenReturn("Void Prompt");
     	
-    	when(initializationService.initializeFromPlanning(any())).thenReturn(init);
+    	when(initializationService.initializeFromPlanning(any(),any())).thenReturn(init);
 
     	when(promptBuilder.buildStanzaPromptFromContext(eq(context)))
     	.thenReturn("Stanza Prompt");

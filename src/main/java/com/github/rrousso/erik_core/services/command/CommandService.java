@@ -8,9 +8,9 @@ import com.github.rrousso.erik_core.domain.models.SessionState;
 import com.github.rrousso.erik_core.domain.valueobjects.CommandResult;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
 import com.github.rrousso.erik_core.persistence.repositories.StanzaRepository;
+import com.github.rrousso.erik_core.services.stanza.StanzaPersistenceService;
 
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Handles explicit commands prefixed with "/".
@@ -32,8 +32,12 @@ public class CommandService {
     private static final String COMMAND_PREFIX = "/";
     
     private final StanzaRepository stanzaRepository;
+    
+    private final StanzaPersistenceService persistenceService;
 
-    public CommandService(StanzaRepository stanzaRepository) {
+    public CommandService(StanzaRepository stanzaRepository,
+    		StanzaPersistenceService persistenceService) {
+    	this.persistenceService = persistenceService;
         this.stanzaRepository = stanzaRepository;
     }
     
@@ -185,13 +189,12 @@ public class CommandService {
             return CommandResult.handled("[System] Invalid ID: " + idArg + ". Must be a number.");
         }
         
-        Optional<Stanza> stanzaOpt = stanzaRepository.findById(id);
-
-        if (stanzaOpt.isEmpty()) {
+        Stanza stanza;
+        try {
+            stanza = persistenceService.loadStanzaWithRelationships(id);  // ← FIX: loads all relationships
+        } catch (IllegalArgumentException e) {
             return CommandResult.handled("[System] No stanza found with ID: " + id);
         }
-
-        Stanza stanza = stanzaOpt.get();
         
         // Store the loaded stanza in session state for Erik to reference
         state.setLoadedStanzaMemory(stanza);

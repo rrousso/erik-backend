@@ -24,7 +24,7 @@ public class StanzaEvent {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "stanza_id", nullable = false)
     private Stanza stanza;
     

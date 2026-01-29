@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.rrousso.erik_core.domain.enums.ModelType;
 import com.github.rrousso.erik_core.domain.models.ConversationHistory;
 import com.github.rrousso.erik_core.dto.initialization.InitializedStanza;
+import com.github.rrousso.erik_core.persistence.entities.Stanza;
 import com.github.rrousso.erik_core.services.config.ConfigService;
 import com.github.rrousso.erik_core.services.llm.LLMClientService;
 import com.github.rrousso.erik_core.services.prompt.PromptLoaderService;
@@ -62,14 +63,15 @@ public class StanzaInitializationService {
      * Initialize a stanza from the planning conversation.
      * 
      * @param voidHistory The conversation history from planning with Erik
+     * @param loadedStanza Optional stanza loaded via /load command (for continuation)
      * @return InitializedStanza with full character roster and tensions
      * @throws Exception if LLM call or parsing fails
      */
-    public InitializedStanza initializeFromPlanning(ConversationHistory voidHistory) throws Exception {
+    public InitializedStanza initializeFromPlanning(ConversationHistory voidHistory, Stanza loadedStanza) throws Exception {
         log.info("[Initialization] Starting stanza initialization from planning conversation");
         
         // Build the input for the initialization prompt
-        String planningContext = buildPlanningContext(voidHistory);
+        String planningContext = buildPlanningContext(voidHistory, loadedStanza);
         String userPersona = configService.getUserPersona();
         
         // Load the initialization prompt
@@ -117,8 +119,45 @@ public class StanzaInitializationService {
     /**
      * Build the planning context from conversation history
      */
-    private String buildPlanningContext(ConversationHistory history) {
+    private String buildPlanningContext(ConversationHistory history, Stanza loadedStanza) {
         StringBuilder sb = new StringBuilder();
+        
+        // If there's a loaded stanza, include it FIRST
+        if (loadedStanza != null) {
+            sb.append("=== LOADED STANZA FOR REFERENCE/CONTINUATION ===\n\n");
+            sb.append("The user has loaded this stanza from the database:\n\n");
+            sb.append("ID: ").append(loadedStanza.getId()).append("\n");
+            sb.append("Setting: ").append(loadedStanza.getSetting()).append("\n");
+            sb.append("Premise: ").append(loadedStanza.getPremise()).append("\n");
+            sb.append("World: ").append(loadedStanza.getWorldIdentifier()).append("\n\n");
+            
+            // Include characters from the loaded stanza
+            if (!loadedStanza.getCharacters().isEmpty()) {
+                sb.append("Characters in loaded stanza:\n");
+                for (var character : loadedStanza.getCharacters()) {
+                    if (!character.isUser()) {
+                        sb.append("- ").append(character.getName());
+                        if (character.getPublicRole() != null && !character.getPublicRole().isEmpty()) {
+                            sb.append(" (").append(character.getPublicRole()).append(")");
+                        }
+                        sb.append("\n");
+                    }
+                }
+                sb.append("\n");
+            }
+            
+            // Include synopsis if available
+            if (loadedStanza.getQuickSynopsis() != null && !loadedStanza.getQuickSynopsis().isEmpty()) {
+                sb.append("What happened in the loaded stanza:\n");
+                sb.append(loadedStanza.getQuickSynopsis()).append("\n\n");
+            }
+            
+            sb.append("IMPORTANT: If the user wants to continue or build on this stanza, ");
+            sb.append("use the SAME characters, SAME setting, SAME world. ");
+            sb.append("Do NOT create a completely new scenario unless explicitly asked.\n\n");
+            sb.append("=== END LOADED STANZA ===\n\n");
+        }
+        
         sb.append("=== PLANNING CONVERSATION ===\n\n");
         
         for (ConversationHistory.Message msg : history.getAllMessages()) {

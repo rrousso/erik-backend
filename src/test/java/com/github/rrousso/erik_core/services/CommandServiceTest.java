@@ -18,6 +18,7 @@ import com.github.rrousso.erik_core.domain.models.SessionState;
 import com.github.rrousso.erik_core.domain.valueobjects.CommandResult;
 import com.github.rrousso.erik_core.persistence.entities.Persona;
 import com.github.rrousso.erik_core.services.command.CommandService;
+import com.github.rrousso.erik_core.services.stanza.StanzaPersistenceService;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
 import com.github.rrousso.erik_core.persistence.repositories.StanzaRepository;
 
@@ -28,12 +29,15 @@ public class CommandServiceTest {
     @Mock
     private StanzaRepository stanzaRepository;
     
+    @Mock
+    private StanzaPersistenceService persistenceService;
+    
     private CommandService commandService;
     private SessionState state;
     
     @BeforeEach
     void setUp() {
-        commandService = new CommandService(stanzaRepository);
+        commandService = new CommandService(stanzaRepository, persistenceService);
         state = new SessionState();
     }
     
@@ -173,20 +177,21 @@ public class CommandServiceTest {
     
     @Test
     @DisplayName("Should handle /load command with non-existent ID")
-    void shouldHandleLoadCommandWithNonExistentId() {
-        when(stanzaRepository.findById(999L)).thenReturn(Optional.empty());
+    void shouldHandleLoadCommandWithNonExistentId() throws Exception{
+    	doThrow(new IllegalArgumentException("Not found"))
+       .when(persistenceService).loadStanzaWithRelationships(999L);
         
         CommandResult result = commandService.processCommand("/load 999", state);
         
         assertTrue(result.wasHandled());
-        assertTrue(result.getResponse().contains("No stanza found with ID"));
+        assertTrue(result.getResponse().contains("[System] No stanza found with ID: 999"));
     }
     
     @Test
     @DisplayName("Should handle /load command successfully")
     void shouldHandleLoadCommandSuccessfully() {
         Stanza stanza = createTestStanza(5L, "Haunted mansion", "Ghost investigation");
-        when(stanzaRepository.findById(5L)).thenReturn(Optional.of(stanza));
+        when(persistenceService.loadStanzaWithRelationships(5L)).thenReturn(stanza);
         
         CommandResult result = commandService.processCommand("/load 5", state);
         

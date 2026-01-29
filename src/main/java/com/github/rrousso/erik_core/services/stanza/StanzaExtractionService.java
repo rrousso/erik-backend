@@ -42,16 +42,13 @@ public class StanzaExtractionService {
     
     private static final Logger log = LoggerFactory.getLogger(StanzaExtractionService.class);
     
-    private final StanzaPersistenceService persistenceService;
     private final ExtractionPromptBuilder promptBuilder;
     private final LLMClientService llmClient;
     private final ObjectMapper objectMapper;
     
     public StanzaExtractionService(
-            StanzaPersistenceService persistenceService,
             ExtractionPromptBuilder promptBuilder,
             LLMClientService llmClient) {
-        this.persistenceService = persistenceService;
         this.promptBuilder = promptBuilder;
         this.llmClient = llmClient;
         this.objectMapper = new ObjectMapper();
@@ -65,24 +62,21 @@ public class StanzaExtractionService {
      * @param narratorResponse What the narrator said
      */
     @Transactional
-    public void extractAndUpdate(@NonNull Long stanzaId, String userInput, String narratorResponse) {
-        log.info("[Extraction] Starting extraction for stanza {}", stanzaId);
+    public void extractAndUpdate(@NonNull Stanza stanza, String userInput, String narratorResponse)  {
+        log.info("[Extraction] Starting extraction for stanza {}", stanza.getId());
         
-        try {
-            // 1. Load stanza with all relationships
-            Stanza stanza = persistenceService.loadStanzaWithRelationships(stanzaId);
-            
-            // 2. Build the extraction prompt
+        try {            
+            // 1. Build the extraction prompt
             String prompt = promptBuilder.buildPrompt(stanza, userInput, narratorResponse);
             
-            // 3. Call Gemini to analyze the exchange
+            // 2. Call Gemini to analyze the exchange
             log.debug("[Extraction] Calling analytical model");
             String jsonResponse = llmClient.call(ModelType.ANALYTICAL, prompt, "Extract state changes");
             
-            // 4. Parse the JSON response
+            // 3. Parse the JSON response
             ExtractionResult result = parseExtractionResult(jsonResponse);
             
-            // 5. Log what we extracted
+            // 4. Log what we extracted
             if (result.hasAnyChanges()) {
                 log.info("[Extraction] Extracted {} total changes: {}", 
                     result.getTotalChangeCount(), result);
@@ -101,7 +95,7 @@ public class StanzaExtractionService {
             log.info("[Extraction] Successfully applied all changes");
             
         } catch (Exception e) {
-            log.error("[Extraction] Failed to extract/apply changes for stanza " + stanzaId, e);
+            log.error("[Extraction] Failed to extract/apply changes for stanza " + stanza.getId(), e);
             // Don't rethrow - extraction failure shouldn't break the narrative flow
         }
     }
@@ -419,7 +413,6 @@ public class StanzaExtractionService {
         
         log.info("[Extraction] Applying {} tension changes", changes.size());
         
-        // TODO: Implement in next step
         for (TensionChange change : changes) {
             // Validate lengths
             if (change.getTensionDescription() != null && change.getTensionDescription().length() > 400) {
