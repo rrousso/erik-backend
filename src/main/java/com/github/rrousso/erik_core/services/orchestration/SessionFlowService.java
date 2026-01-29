@@ -14,7 +14,6 @@ import com.github.rrousso.erik_core.dto.initialization.InitializedStanza;
 import com.github.rrousso.erik_core.persistence.entities.Persona;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
 import com.github.rrousso.erik_core.persistence.repositories.PersonaRepository;
-import com.github.rrousso.erik_core.persistence.repositories.StanzaRecordRepository;
 import com.github.rrousso.erik_core.services.llm.FlagDetectorService;
 import com.github.rrousso.erik_core.services.llm.LLMClientService;
 import com.github.rrousso.erik_core.services.prompt.SystemPromptBuilderService;
@@ -53,7 +52,6 @@ public class SessionFlowService {
             FlagDetectorService flagDetector,
             SessionAssemblerService sessionAssembler, 
             PersonaRepository personaRepository, 
-            StanzaRecordRepository stanzaRecordRepository,
             StanzaInitializationService initializationService,
             StanzaPersistenceService persistenceService,
             StanzaExtractionService extractionService) { 
