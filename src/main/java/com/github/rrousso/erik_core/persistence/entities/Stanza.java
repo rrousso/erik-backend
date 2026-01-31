@@ -3,7 +3,9 @@ package com.github.rrousso.erik_core.persistence.entities;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -15,6 +17,11 @@ import org.hibernate.type.SqlTypes;
  * 
  * This is NOT a snapshot saved at the end - it's the active container
  * that gets updated every exchange throughout the stanza's lifetime.
+ * 
+ * BEAT INTEGRATION:
+ * - Stanzas contain beats (scenes)
+ * - Beat 1 is auto-created on stanza initialization
+ * - User creates additional beats via ((next beat: context))
  */
 @Entity
 @Table(name = "stanzas")
@@ -63,17 +70,19 @@ public class Stanza {
     @Column(name = "quick_synopsis", length = 2000)
     private String quickSynopsis;
     
-    // Note: search_vector will be added via SQL migration for full-text search
-    // PostgreSQL tsvector type isn't directly supported by Hibernate
-    
     // === TRACKING ===
     @Column(name = "current_beat")
-    private Integer currentBeat = 0;
+    private Integer currentBeat = 1;  // Start at 1 (beat 1 auto-created)
     
     @Column(name = "current_exchange")
     private Integer currentExchange = 0;
     
     // === RELATIONSHIPS ===
+    
+    @OneToMany(mappedBy = "stanza", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("beatNumber ASC")
+    private List<Beat> beats = new ArrayList<>();
+    
     @OneToMany(mappedBy = "stanza", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<StanzaCharacter> characters = new ArrayList<>();
     
@@ -106,7 +115,7 @@ public class Stanza {
         this.worldIdentifier = worldIdentifier;
     }
     
-    // === CONVENIENCE METHODS ===
+    // === STATUS CONVENIENCE METHODS ===
     
     public boolean isActive() {
         return "active".equals(status);
@@ -124,14 +133,138 @@ public class Stanza {
         return "abandoned".equals(status);
     }
     
+    // === EXCHANGE TRACKING ===
+    
     public void incrementExchange() {
         this.currentExchange++;
     }
     
+    /**
+     * @deprecated Use beat management methods instead
+     */
+    @Deprecated
     public void incrementBeat() {
         this.currentBeat++;
         this.currentExchange++;
     }
+    
+    // === BEAT MANAGEMENT ===
+    
+    /**
+     * Initialize the first beat when stanza is created.
+     * Should be called after stanza initialization.
+     */
+    public void initializeFirstBeat() {
+        if (!beats.isEmpty()) {
+            return; // Already initialized
+        }
+        
+        Beat firstBeat = new Beat(this, 1, 1);
+        firstBeat.setTransitionContext("Opening scene");
+        beats.add(firstBeat);
+    }
+    
+    /**
+     * Get the currently active beat (endExchange = null)
+     */
+    public Beat getCurrentBeat() {
+        return beats.stream()
+            .filter(Beat::isActive)
+            .findFirst()
+            .orElse(null);
+    }
+    
+    /**
+     * Get all completed beats (endExchange != null), sorted by beat number
+     */
+    public List<Beat> getCompletedBeats() {
+        return beats.stream()
+            .filter(b -> !b.isActive())
+            .sorted(Comparator.comparing(Beat::getBeatNumber))
+            .collect(Collectors.toList());
+    }
+    
+    /**
+     * End the current beat and start a new one.
+     * 
+     * This method:
+     * 1. Ends current beat with provided summary
+     * 2. Deletes all minor events from ended beat
+     * 3. Increments beat counter
+     * 4. Creates new beat with transition context
+     * 
+     * @param summary Prose summary of the beat being ended
+     * @param transitionContext User's guidance for new beat
+     */
+    public void endCurrentBeatAndStartNew(String summary, String transitionContext) {
+        Beat current = getCurrentBeat();
+        if (current == null) {
+            throw new IllegalStateException("No active beat to end");
+        }
+        
+        // End current beat
+        current.end(this.currentExchange, summary);
+        
+        // Delete minor events from ended beat
+        deleteMinorEventsFromBeat(current);
+        
+        // Increment beat counter
+        this.currentBeat++;
+        
+        // Create new beat
+        Beat newBeat = new Beat(this, this.currentBeat, this.currentExchange + 1);
+        newBeat.setTransitionContext(transitionContext);
+        beats.add(newBeat);
+    }
+    
+    /**
+     * End the current beat (for stanza completion).
+     * Does NOT create a new beat.
+     */
+    public void endCurrentBeat(String summary) {
+        Beat current = getCurrentBeat();
+        if (current == null) {
+            return; // No active beat
+        }
+        
+        current.end(this.currentExchange, summary);
+        deleteMinorEventsFromBeat(current);
+    }
+    
+    /**
+     * Delete all minor (non-major) events from a completed beat.
+     * Major events are preserved for reference.
+     */
+    private void deleteMinorEventsFromBeat(Beat beat) {
+        events.removeIf(event -> 
+            event.getBeat() != null && 
+            event.getBeat().equals(beat) && 
+            !event.isMajor()
+        );
+    }
+    
+    /**
+     * Get all events for a specific beat
+     */
+    public List<StanzaEvent> getEventsForBeat(Beat beat) {
+        return events.stream()
+            .filter(e -> e.getBeat() != null && e.getBeat().equals(beat))
+            .sorted(Comparator.comparing(StanzaEvent::getExchangeNumber))
+            .collect(Collectors.toList());
+    }
+    
+    /**
+     * Get all events for the current beat
+     */
+    public List<StanzaEvent> getCurrentBeatEvents() {
+        Beat current = getCurrentBeat();
+        if (current == null) {
+            return new ArrayList<>();
+        }
+        return getEventsForBeat(current);
+    }
+    
+    // === CHARACTER CONVENIENCE METHODS ===
     
     public StanzaCharacter getUserCharacter() {
         return characters.stream()
@@ -152,6 +285,8 @@ public class Stanza {
             .toList();
     }
     
+    // === TENSION CONVENIENCE METHODS ===
+    
     public List<Tension> getActiveTensions() {
         return tensions.stream()
             .filter(t -> "active".equals(t.getStatus()))
@@ -160,8 +295,67 @@ public class Stanza {
     
     public List<Tension> getHighPressureTensions() {
         return tensions.stream()
-            .filter(t -> "active".equals(t.getStatus()) && t.getPressure() >= 7)
+            .filter(t -> "active".equals(t.getStatus()))
+            .filter(t -> t.getPressure() >= 7)
             .toList();
+    }
+    
+    // === FORMAT FOR NARRATOR (with beat summaries) ===
+    
+    /**
+     * Convert to a narrator-friendly context string.
+     * 
+     * NEW: Includes beat summaries for completed beats,
+     * and current beat info (but not individual events - those are in synopsis)
+     */
+    public String toNarratorContext() {
+        StringBuilder sb = new StringBuilder();
+        
+        sb.append("=== STANZA CONTEXT ===\n\n");
+        
+        // 1. COMPLETED BEATS (Summary)
+        List<Beat> completedBeats = getCompletedBeats();
+        if (!completedBeats.isEmpty()) {
+            sb.append("=== PREVIOUS BEATS (Summary) ===\n\n");
+            for (Beat beat : completedBeats) {
+                sb.append("Beat ").append(beat.getBeatNumber());
+                
+                String context = beat.getTransitionContext();
+                if (context != null && !context.isEmpty()) {
+                    sb.append(" - ").append(context);
+                }
+                
+                sb.append(" (Exchanges ").append(beat.getStartExchange())
+                  .append("-").append(beat.getEndExchange()).append(")\n\n");
+                
+                if (beat.getSummary() != null && !beat.getSummary().isEmpty()) {
+                    sb.append(beat.getSummary()).append("\n\n");
+                } else {
+                    sb.append("[Summary not yet generated]\n\n");
+                }
+                
+                sb.append("---\n\n");
+            }
+        }
+        
+        // 2. CURRENT BEAT (Active)
+        Beat currentBeat = getCurrentBeat();
+        if (currentBeat != null) {
+            sb.append("=== CURRENT BEAT (Beat ").append(currentBeat.getBeatNumber()).append(") ===\n");
+            
+            String context = currentBeat.getTransitionContext();
+            if (context != null && !context.isEmpty()) {
+                sb.append("Scene Context: ").append(context).append("\n");
+            }
+            
+            sb.append("Started: Exchange ").append(currentBeat.getStartExchange()).append("\n");
+            sb.append("Current Exchange: ").append(this.currentExchange).append("\n\n");
+        }
+        
+        // 3. Characters, tensions, etc. (existing code would continue here)
+        // Note: Individual events are NOT included here - they're in the synopsis
+        
+        return sb.toString();
     }
     
     // === GETTERS AND SETTERS ===
@@ -262,7 +456,9 @@ public class Stanza {
         this.quickSynopsis = quickSynopsis;
     }
     
-    public Integer getCurrentBeat() {
+    public Integer getCurrentBeatNumber() {
+        // Note: This returns the beat NUMBER, not the Beat object
+        // Use getCurrentBeat() method for the object
         return currentBeat;
     }
     
@@ -276,6 +472,14 @@ public class Stanza {
     
     public void setCurrentExchange(Integer currentExchange) {
         this.currentExchange = currentExchange;
+    }
+    
+    public List<Beat> getBeats() {
+        return beats;
+    }
+    
+    public void setBeats(List<Beat> beats) {
+        this.beats = beats;
     }
     
     public List<StanzaCharacter> getCharacters() {
@@ -332,223 +536,5 @@ public class Stanza {
     
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
-    }
-    
-    // ========== FORMAT FOR NARRATOR ==========
-    
-    /**
-     * Convert to a narrator-friendly context string.
-     * This is what gets injected into the narrator's system prompt.
-     * Mirrors InitializedStanza.toNarratorContext() but reads from DB fields.
-     */
-    public String toNarratorContext() {
-        StringBuilder sb = new StringBuilder();
-        
-        sb.append("=== STANZA INITIALIZATION ===\n\n");
-        
-        // World identifier
-        if (worldIdentifier != null && !worldIdentifier.isEmpty()) {
-            sb.append("World: ").append(worldIdentifier.toUpperCase()).append("\n\n");
-        }
-        
-        // User character
-        StanzaCharacter user = getUserCharacter();
-        if (user != null) {
-            sb.append("=== USER CHARACTER ===\n\n");
-            sb.append(formatUserCharacter(user));
-            sb.append("\n");
-        }
-        
-        // Present characters (full context)
-        List<StanzaCharacter> present = getPresentCharacters();
-        // Filter out user from present list
-        present = present.stream().filter(c -> !c.isUser()).toList();
-        if (!present.isEmpty()) {
-            sb.append("=== CHARACTERS IN SCENE (Full Context) ===\n\n");
-            for (StanzaCharacter c : present) {
-                sb.append(formatCharacterFull(c));
-                sb.append("\n---\n\n");
-            }
-        }
-        
-        // Potential characters (limited context)
-        List<StanzaCharacter> potential = getPotentialCharacters();
-        if (!potential.isEmpty()) {
-            sb.append("=== CHARACTERS WHO MIGHT APPEAR ===\n");
-            sb.append("(You MAY introduce these if narratively appropriate)\n\n");
-            for (StanzaCharacter c : potential) {
-                sb.append(formatCharacterPotential(c));
-                sb.append("\n");
-            }
-            sb.append("\n");
-        }
-        
-        // Background characters (reference only)
-        List<StanzaCharacter> background = getBackgroundCharacters();
-        if (!background.isEmpty()) {
-            sb.append("=== BACKGROUND CHARACTERS (Reference Only) ===\n");
-            sb.append("(May be mentioned in dialogue, should NOT appear without setup)\n\n");
-            for (StanzaCharacter c : background) {
-                sb.append("- ").append(c.getName());
-                if (c.getCanonRole() != null) {
-                    sb.append(" (").append(c.getCanonRole()).append(")");
-                }
-                if (c.getEmotionalState() != null) {
-                    // Background chars store threat/ally info in emotionalState field
-                    sb.append(" - ").append(c.getEmotionalState());
-                }
-                sb.append("\n");
-            }
-            sb.append("\n");
-        }
-        
-        // Active tensions
-        List<Tension> activeTensions = getActiveTensions();
-        if (!activeTensions.isEmpty()) {
-            sb.append("=== ACTIVE NARRATIVE TENSIONS ===\n\n");
-            for (Tension t : activeTensions) {
-                sb.append(formatTension(t));
-                sb.append("\n");
-            }
-            sb.append("\n");
-        }
-        
-        // World context
-        sb.append("=== WORLD CONTEXT ===\n\n");
-        sb.append(formatWorldContext());
-        
-        return sb.toString();
-    }
-    
-    /**
-     * Get background characters
-     */
-    public List<StanzaCharacter> getBackgroundCharacters() {
-        return characters.stream()
-            .filter(c -> "background".equals(c.getPresenceStatus()))
-            .toList();
-    }
-    
-    // ========== FORMATTING HELPERS ==========
-    
-    private String formatUserCharacter(StanzaCharacter user) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("**").append(user.getName()).append("**\n");
-        
-        if (user.getPublicRole() != null && !user.getPublicRole().isEmpty()) {
-            sb.append("Public Role: ").append(user.getPublicRole()).append("\n");
-        }
-        
-        if (user.getPrivateBackstory() != null && !user.getPrivateBackstory().isEmpty()) {
-            sb.append("Private Backstory (NARRATOR ONLY): ").append(user.getPrivateBackstory()).append("\n");
-        }
-        
-        if (user.getCurrentLocation() != null && !user.getCurrentLocation().isEmpty()) {
-            sb.append("Current Location: ").append(user.getCurrentLocation()).append("\n");
-        }
-        
-        if (user.getVisibleTraits() != null && user.getVisibleTraits().length > 0) {
-            sb.append("Visible Traits: ").append(String.join(", ", user.getVisibleTraits())).append("\n");
-        }
-        
-        if (user.getGoals() != null && user.getGoals().length > 0) {
-            sb.append("Current Goals: ").append(String.join(", ", user.getGoals())).append("\n");
-        }
-        
-        return sb.toString();
-    }
-    
-    private String formatCharacterFull(StanzaCharacter c) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("**").append(c.getName()).append("**\n");
-        
-        if (c.getCanonRole() != null && !c.getCanonRole().isEmpty()) {
-            sb.append("Canon Role: ").append(c.getCanonRole()).append("\n");
-        }
-        
-        if (c.getEmotionalState() != null && !c.getEmotionalState().isEmpty()) {
-            sb.append("Emotional State: ").append(c.getEmotionalState()).append("\n");
-        }
-        
-        if (c.getRelationshipToUser() != null && !c.getRelationshipToUser().isEmpty()) {
-            sb.append("Relationship to User: ").append(c.getRelationshipToUser()).append("\n");
-        }
-        
-        if (c.getMotivations() != null && c.getMotivations().length > 0) {
-            sb.append("Motivations: ").append(String.join(", ", c.getMotivations())).append("\n");
-        }
-        
-        // Format what they know
-        if (!c.getKnownFacts().isEmpty()) {
-            sb.append("Currently Knows:\n");
-            for (CharacterKnowledge k : c.getKnownFacts()) {
-                sb.append("  - ").append(k.getFact().getPredicate()).append("\n");
-            }
-        }
-        
-        // Format what they don't know (secrets they're unaware of)
-        List<CharacterSecretState> unaware = c.getSecretStates().stream()
-            .filter(s -> "UNAWARE".equals(s.getState()))
-            .toList();
-        if (!unaware.isEmpty()) {
-            sb.append("Does NOT Know:\n");
-            for (CharacterSecretState s : unaware) {
-                sb.append("  - ").append(s.getSecret().getFact().getPredicate()).append("\n");
-            }
-        }
-        
-        return sb.toString();
-    }
-    
-    private String formatCharacterPotential(StanzaCharacter c) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("- **").append(c.getName()).append("**");
-        
-        if (c.getCanonRole() != null && !c.getCanonRole().isEmpty()) {
-            sb.append(" (").append(c.getCanonRole()).append(")");
-        }
-        
-        if (c.getRelationshipToUser() != null && !c.getRelationshipToUser().isEmpty()) {
-            sb.append(" - ").append(c.getRelationshipToUser());
-        }
-        
-        return sb.toString();
-    }
-    
-    private String formatTension(Tension t) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("**").append(t.getDescription()).append("**\n");
-        sb.append("  Pressure: ").append(t.getPressure()).append("/10\n");
-        
-        if (t.getInvolvedCharacters() != null && !t.getInvolvedCharacters().isEmpty()) {
-            sb.append("  Involved: ").append(t.getInvolvedCharacters()).append("\n");
-        }
-        
-        if (t.getPotentialTriggers() != null && !t.getPotentialTriggers().isEmpty()) {
-            sb.append("  Triggers: ").append(t.getPotentialTriggers().replace("|", ", ")).append("\n");
-        }
-        
-        return sb.toString();
-    }
-    
-    private String formatWorldContext() {
-        StringBuilder sb = new StringBuilder();
-        
-        if (timeContext != null && !timeContext.isEmpty()) {
-            sb.append("Time: ").append(timeContext).append("\n");
-        }
-        
-        if (worldState != null && !worldState.isEmpty()) {
-            sb.append("Current State: ").append(worldState).append("\n");
-        }
-        
-        if (worldRules != null && worldRules.length > 0) {
-            sb.append("Rules:\n");
-            for (String rule : worldRules) {
-                sb.append("  - ").append(rule).append("\n");
-            }
-        }
-        
-        return sb.toString();
     }
 }

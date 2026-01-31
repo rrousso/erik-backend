@@ -65,8 +65,8 @@ public class TensionChangeApplier implements ExtractionApplier<TensionChange> {
             newTension.setStanza(stanza);
             newTension.setStatus("ACTIVE");
             newTension.setSource("NARRATOR_EMERGENT");  
-            newTension.setCreatedBeat(stanza.getCurrentBeat()); 
-            newTension.setUpdatedBeat(stanza.getCurrentBeat());
+            newTension.setCreatedBeat(stanza.getCurrentBeatNumber()); 
+            newTension.setUpdatedBeat(stanza.getCurrentBeatNumber());
             
             stanza.getTensions().add(newTension);
             
@@ -122,7 +122,7 @@ public class TensionChangeApplier implements ExtractionApplier<TensionChange> {
         
         if (newPressure != null && !newPressure.equals(oldPressure)) {
             tension.setPressure(newPressure);        
-            tension.setUpdatedBeat(stanza.getCurrentBeat());
+            tension.setUpdatedBeat(stanza.getCurrentBeatNumber());
             
             if (newPressure > oldPressure) {
                 log.info("[TensionChangeApplier] Tension ESCALATED: '{}' from {} to {}", 

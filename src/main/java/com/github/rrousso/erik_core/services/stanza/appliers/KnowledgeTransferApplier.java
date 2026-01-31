@@ -80,7 +80,7 @@ public class KnowledgeTransferApplier implements ExtractionApplier<KnowledgeTran
         fact.setKind("OBSERVED"); // Default kind - could be enhanced based on howLearned
         fact.setFactValue("true"); // Simple boolean fact
         fact.setSource("NARRATOR_EMERGENT"); // Source is the narration
-        fact.setCreatedBeat(stanza.getCurrentBeat());
+        fact.setCreatedBeat(stanza.getCurrentBeatNumber());
         fact.setCreatedExchange(stanza.getCurrentExchange());
         
         // Add fact to stanza's facts collection
@@ -93,7 +93,7 @@ public class KnowledgeTransferApplier implements ExtractionApplier<KnowledgeTran
         knowledge.setFact(fact);
         knowledge.setHow(transfer.getHowLearned()); // OBSERVED, TOLD, INFERRED
         knowledge.setStatus("LEARNED");
-        knowledge.setLearnedBeat(stanza.getCurrentBeat());
+        knowledge.setLearnedBeat(stanza.getCurrentBeatNumber());
         knowledge.setLearnedExchange(stanza.getCurrentExchange());
         
         // 4. Add to character's knownFacts collection

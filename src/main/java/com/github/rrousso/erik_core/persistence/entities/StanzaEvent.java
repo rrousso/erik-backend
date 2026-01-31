@@ -15,6 +15,11 @@ import org.hibernate.annotations.CreationTimestamp;
  * - Chronological record of what happened
  * - Context for synopsis generation
  * - Reference for continuation
+ * 
+ * BEAT INTEGRATION:
+ * - Events are linked to beats via beat_id
+ * - When beat ends, minor events are deleted
+ * - Major events are preserved for reference
  */
 @Entity
 @Table(name = "stanza_events")
@@ -29,6 +34,13 @@ public class StanzaEvent {
     private Stanza stanza;
     
     /**
+     * Which beat this event occurred in (foreign key relationship)
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "beat_id")
+    private Beat beat;
+    
+    /**
      * What happened. Max 280 characters.
      * Should be one atomic event.
      * Example: "Derek sensed user's magical signature at the fair"
@@ -37,7 +49,8 @@ public class StanzaEvent {
     private String description;
     
     /**
-     * Which beat this event occurred in.
+     * Which beat this event occurred in (denormalized for queries).
+     * Kept for backwards compatibility and easy filtering.
      */
     @Column(name = "beat_number")
     private Integer beatNumber;
@@ -56,7 +69,10 @@ public class StanzaEvent {
     private String involvedCharacters;
     
     /**
-     * Is this a major event? Major events are prioritized in synopsis.
+     * Is this a major event? Major events are:
+     * - Preserved when beat ends (minor events deleted)
+     * - Prioritized in synopsis
+     * - Used for beat summaries
      */
     @Column(name = "is_major")
     private boolean isMajor = false;
@@ -135,6 +151,18 @@ public class StanzaEvent {
     
     public void setStanza(Stanza stanza) {
         this.stanza = stanza;
+    }
+    
+    public Beat getBeat() {
+        return beat;
+    }
+    
+    public void setBeat(Beat beat) {
+        this.beat = beat;
+        // Keep beatNumber synchronized
+        if (beat != null) {
+            this.beatNumber = beat.getBeatNumber();
+        }
     }
     
     public String getDescription() {

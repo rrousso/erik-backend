@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.github.rrousso.erik_core.dto.extraction.EventExtraction;
+import com.github.rrousso.erik_core.persistence.entities.Beat;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
 import com.github.rrousso.erik_core.persistence.entities.StanzaEvent;
 
@@ -13,16 +14,10 @@ import com.github.rrousso.erik_core.persistence.entities.StanzaEvent;
  * 
  * Creates StanzaEvent entries in the database for each extracted event.
  * 
- * Process:
- * 1. Validate description length (max 280 chars)
- * 2. Create a new StanzaEvent entity
- * 3. Set description, beat/exchange numbers, involved characters, major flag
- * 4. Add to stanza's events list (cascade will persist it)
- * 
- * Events represent things that happened during the exchange:
- * - "Derek revealed his werewolf identity to Stiles"
- * - "The pack decided to investigate the Alpha"
- * - "Scott transformed under the full moon"
+ * BEAT INTEGRATION:
+ * - Links events to current beat (via beat relationship)
+ * - Sets both beat (entity) and beatNumber (denormalized field)
+ * - When beat ends, minor events will be deleted (major events kept)
  */
 @Component
 public class EventApplier implements ExtractionApplier<EventExtraction> {
@@ -51,9 +46,18 @@ public class EventApplier implements ExtractionApplier<EventExtraction> {
         // Set description (entity constructor handles truncation)
         event.setDescription(description);
         
-        // Set when this happened (beat and exchange)
-        event.setBeatNumber(stanza.getCurrentBeat());
+        // Set exchange number
         event.setExchangeNumber(stanza.getCurrentExchange());
+        
+        // NEW: Link to current beat (entity + denormalized beatNumber)
+        Beat currentBeat = stanza.getCurrentBeat();
+        if (currentBeat != null) {
+            event.setBeat(currentBeat);  // This also sets beatNumber
+        } else {
+            // Fallback: just set beatNumber if no beat entity found
+            log.warn("[EventApplier] No current beat found, using beat number from stanza");
+            event.setBeatNumber(stanza.getCurrentBeatNumber());  // FIXED: use getCurrentBeatNumber()
+        }
         
         // Convert List<String> to comma-separated string for involved characters
         if (extraction.getCharactersInvolved() != null && !extraction.getCharactersInvolved().isEmpty()) {
@@ -68,8 +72,9 @@ public class EventApplier implements ExtractionApplier<EventExtraction> {
         // Because of cascade = CascadeType.ALL, this will be saved when the transaction commits
         stanza.getEvents().add(event);
         
-        log.debug("[EventApplier] Created event: {} (exchange {}, {})", 
+        log.debug("[EventApplier] Created event: {} (beat {}, exchange {}, {})", 
             description, 
+            event.getBeatNumber(),
             stanza.getCurrentExchange(),
             extraction.getSignificance());
     }

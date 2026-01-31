@@ -121,7 +121,7 @@ public class SecretRevelationApplier implements ExtractionApplier<SecretRevelati
             // Use the convenience method
             secretState.unlock(
                 revelation.getHowRevealed(), 
-                stanza.getCurrentBeat(), 
+                stanza.getCurrentBeatNumber(), 
                 stanza.getCurrentExchange()
             );
             
@@ -134,7 +134,7 @@ public class SecretRevelationApplier implements ExtractionApplier<SecretRevelati
             // Use the convenience method
             secretState.makeSuspicious(
                 revelation.getHowRevealed(), 
-                stanza.getCurrentBeat(), 
+                stanza.getCurrentBeatNumber(), 
                 stanza.getCurrentExchange()
             );
             

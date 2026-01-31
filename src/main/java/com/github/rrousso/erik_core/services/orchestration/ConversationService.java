@@ -8,10 +8,12 @@ import com.github.rrousso.erik_core.domain.enums.ModelType;
 import com.github.rrousso.erik_core.domain.models.ConversationHistory;
 import com.github.rrousso.erik_core.domain.models.SessionContext;
 import com.github.rrousso.erik_core.domain.models.SessionState;
+import com.github.rrousso.erik_core.persistence.entities.Stanza;
 import com.github.rrousso.erik_core.services.llm.LLMClientService;
 import com.github.rrousso.erik_core.services.prompt.SystemPromptBuilderService;
 import com.github.rrousso.erik_core.services.session.SessionAssemblerService;
 import com.github.rrousso.erik_core.services.session.SynopsisGeneratorService;
+import com.github.rrousso.erik_core.services.stanza.StanzaPersistenceService;
 
 /**
  * Unified service for handling LLM conversations in both VOID and STANZA modes.
@@ -46,16 +48,19 @@ public class ConversationService {
     private final SystemPromptBuilderService promptBuilder;
     private final SessionAssemblerService sessionAssembler;
     private final SynopsisGeneratorService synopsisGenerator;
+    private final StanzaPersistenceService persistenceService;
     
     public ConversationService(
             LLMClientService llmClient,
             SystemPromptBuilderService promptBuilder,
             SessionAssemblerService sessionAssembler,
-            SynopsisGeneratorService synopsisGenerator) {
+            SynopsisGeneratorService synopsisGenerator,
+            StanzaPersistenceService persistenceService) {
         this.llmClient = llmClient;
         this.promptBuilder = promptBuilder;
         this.sessionAssembler = sessionAssembler;
         this.synopsisGenerator = synopsisGenerator;
+		this.persistenceService = persistenceService;
     }
     
     /**
@@ -102,7 +107,20 @@ public class ConversationService {
         // 6. Generate synopsis (only for STANZA mode)
         if (mode == ConversationMode.STANZA) {
             try {
-                synopsisGenerator.generateSynopsis(state.getStanzaHistory());
+                // NEW: Synopsis generation needs both history AND stanza
+                if (synopsisGenerator.shouldGenerateSynopsis(state.getStanzaHistory())) {
+                    Long stanzaId = state.getActiveStanzaId();
+                    if (stanzaId != null) {
+                        Stanza stanza = persistenceService.loadStanzaWithRelationships(stanzaId);
+                        if (stanza != null) {
+                            synopsisGenerator.generateSynopsis(state.getStanzaHistory(), stanza);
+                        } else {
+                            log.warn("Could not load stanza {} for synopsis generation", stanzaId);
+                        }
+                    } else {
+                        log.debug("No active stanza ID, skipping synopsis generation");
+                    }
+                }
             } catch (Exception e) {
                 log.warn("Failed to generate synopsis", e);
                 // Don't fail the whole conversation if synopsis generation fails

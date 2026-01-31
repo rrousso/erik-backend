@@ -1,29 +1,52 @@
 package com.github.rrousso.erik_core.domain.enums;
 
 /**
- * Enum of all possible system flags
+ * Flags detected in user input that trigger special behavior.
+ * 
+ * These are OOC (out of character) commands that affect the stanza lifecycle.
  */
 public enum Flag {
-    NONE,               // No flag detected
-    START_STANZA,       // User wants to start the stanza
-    CONTINUE_STANZA,    // User wants to continue from pause
-    PAUSE_STANZA,       // User wants to pause the stanza
-    END_STANZA,         // User wants to end the stanza
-    ABANDON_STANZA;     // User wants to abandon the stanza
+    /**
+     * No special flag detected - normal narration
+     */
+    NONE,
     
     /**
-     * Parse a flag string into an enum value
+     * User wants to start the stanza (begin narration)
+     * Examples: "yes", "let's begin", "start the stanza"
      */
-    public static Flag fromString(String flagStr) {
-        if (flagStr == null || flagStr.trim().isEmpty()) {
-            return NONE;
-        }
-        
-        try {
-            return Flag.valueOf(flagStr.trim().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            System.err.println("[Warning] Unknown flag: " + flagStr);
-            return NONE;
-        }
-    }
+    START_STANZA,
+    
+    /**
+     * User wants to pause the stanza to discuss changes with Erik
+     * Examples: ((pause)), "I want to pause"
+     */
+    PAUSE_STANZA,
+    
+    /**
+     * User wants to resume a paused stanza
+     * Examples: "let's continue", "resume the stanza"
+     */
+    CONTINUE_STANZA,
+    
+    /**
+     * User wants to end the stanza (complete it)
+     * Examples: ((end stanza)), ((end))
+     */
+    END_STANZA,
+    
+    /**
+     * User wants to abandon the stanza (discard it)
+     * Examples: ((abandon)), "never mind, let's start over"
+     */
+    ABANDON_STANZA,
+    
+    /**
+     * User wants to transition to a new beat (scene change)
+     * Examples: 
+     * - "I sit down." ((next beat: Let's see what the pack is doing))
+     * - ((next beat: Time skip to evening))
+     * - "We finish talking." ((new beat: School cafeteria - Afternoon))
+     */
+    NEXT_BEAT
 }

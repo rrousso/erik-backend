@@ -4,12 +4,15 @@ import org.springframework.stereotype.Service;
 
 import com.github.rrousso.erik_core.domain.enums.ModelType;
 import com.github.rrousso.erik_core.domain.models.ConversationHistory;
+import com.github.rrousso.erik_core.persistence.entities.Stanza;
+import com.github.rrousso.erik_core.persistence.entities.StanzaEvent;
 import com.github.rrousso.erik_core.services.config.ConfigService;
 import com.github.rrousso.erik_core.services.llm.LLMClientService;
 import com.github.rrousso.erik_core.services.prompt.SystemPromptBuilderService;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -18,17 +21,28 @@ import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Spring service for generating synopses using template-based prompts.
- * Strips OOC commands and uses synopsis + currentHistory for complete context.
- * ENHANCED: Now saves synopsis to file for inspection
+ * 
+ * NEW BEHAVIOR (Synopsis FROM Events):
+ * - Synopsis is generated from EXTRACTED EVENTS in the database
+ * - Events are the source of truth, synopsis is the narrative view
+ * - Recent exchanges still included for narrative flavor
+ * - No more redundancy: events → synopsis (not exchanges → synopsis → events)
+ * 
+ * BEAT INTEGRATION:
+ * - Synopsis organizes events by beat
+ * - Current beat gets detailed event listing
+ * - Completed beats already have summaries (don't need synopsis)
  */
 @Service
 public class SynopsisGeneratorService {
     
-	private static final Logger log = LoggerFactory.getLogger(SynopsisGeneratorService.class);
-	
+    private static final Logger log = LoggerFactory.getLogger(SynopsisGeneratorService.class);
+    
     private final LLMClientService llmClient;
     private final SystemPromptBuilderService promptBuilder;
     private final ConfigService configService;
@@ -38,107 +52,187 @@ public class SynopsisGeneratorService {
     private static final String ROLLING_SYNOPSIS_DEBUG_FILE = "user_data/rolling_synopsis.txt";
     private static final String DISTILLED_CHANGES_DEBUG_FILE = "user_data/distilled_changes.txt";
     
-    public SynopsisGeneratorService(LLMClientService llmClient, SystemPromptBuilderService promptBuilder, ConfigService configService) {
+    public SynopsisGeneratorService(
+            LLMClientService llmClient, 
+            SystemPromptBuilderService promptBuilder, 
+            ConfigService configService) {
         this.llmClient = llmClient;
         this.promptBuilder = promptBuilder;
         this.configService = configService;
     }
     
     /** 
-     * Generate rolling synopsis using world_snapshot_synopsis template
-     * Uses ANALYTICAL model (Gemini) for efficiency
-     * Uses trimmed currentHistory (frequent, efficient updates)
+     * Generate rolling synopsis using world_snapshot_synopsis template.
+     * 
+     * NEW: Uses extracted events from database as source of truth.
+     * Recent exchanges are included for narrative flavor only.
+     * 
+     * @param history The conversation history
+     * @param stanza The stanza entity (for accessing events)
      */
-    public String generateSynopsis(ConversationHistory history) throws Exception {
-    	
+    public String generateSynopsis(ConversationHistory history, Stanza stanza) throws Exception {
+        
         int threshold = getSynopsisThreshold();
-    	
+        
         if (history.getCurrentHistorySize() < threshold) {
+            log.debug("[Synopsis] History size {} below threshold {}, skipping", 
+                history.getCurrentHistorySize(), threshold);
             return history.getSynopsis();
         }
-
-        // Get OLD messages that need to be condensed
-        List<ConversationHistory.Message> oldMessages = history.getExchangesForSynopsis(getWindowSize());
         
-        if (oldMessages.isEmpty()) {
+        // Calculate which exchanges to condense
+        int windowSize = getWindowSize();
+        int historySize = history.getCurrentHistorySize();
+        int keepCount = windowSize;
+        int oldMessagesCount = historySize - keepCount;
+        
+        if (oldMessagesCount <= 0) {
             log.info("[Synopsis] No old messages to condense yet. Skipping synopsis generation.");
             return history.getSynopsis();
         }
         
-        // Format old messages as text (with OOC stripped)
-        String exchangeText = formatMessagesAsText(oldMessages, true);
-        log.info("[Synopsis] Exchange text to be condensed (" + exchangeText.length() + " chars)");
-
+        // NEW: Get events for old exchanges (from database, not conversation history)
+        int startExchange = 1;  // Or track where last synopsis ended
+        int endExchange = oldMessagesCount;
+        
+        List<StanzaEvent> eventsToCondense = stanza.getEvents().stream()
+            .filter(e -> e.getExchangeNumber() >= startExchange && 
+                         e.getExchangeNumber() <= endExchange)
+            .sorted((e1, e2) -> Integer.compare(e1.getExchangeNumber(), e2.getExchangeNumber()))
+            .collect(Collectors.toList());
+        
+        log.info("[Synopsis] Condensing {} events from exchanges {}-{}", 
+            eventsToCondense.size(), startExchange, endExchange);
+        
+        // Format events as text for prompt
+        String eventsText = formatEventsForSynopsis(eventsToCondense);
+        log.debug("[Synopsis] Events text ({} chars)", eventsText.length());
+        
+        // Get recent raw exchanges for flavor (this returns a String)
+        String recentExchangesText = history.getRecentExchangesForSystemPrompt();
+        log.debug("[Synopsis] Recent exchanges text ({} chars)", recentExchangesText.length());
+        
+        // Get previous synopsis
         String previousSynopsis = history.getSynopsis();
         if (previousSynopsis.isEmpty()) {
             previousSynopsis = "[No previous snapshot]";
         }
-        log.info("[Synopsis] Previous synopsis (" + previousSynopsis.length() + " chars)");
-
+        log.info("[Synopsis] Previous synopsis ({} chars)", previousSynopsis.length());
+        
         // Get template and fill it in
         String template = promptBuilder.buildWorldSnapshotPrompt(configService.getUserPersona());
         String filledPrompt = template
             .replace("${previousSnapshot}", previousSynopsis)
-            .replace("${exchangeText}", exchangeText);
-
-        log.info("[System] Generating rolling synopsis using world_snapshot template...");
-
-        // Use ANALYTICAL model - simple call with filled template as user prompt
+            .replace("${extractedEvents}", eventsText)
+            .replace("${recentExchanges}", recentExchangesText);
+        
+        log.info("[System] Generating rolling synopsis using world_snapshot template (events-based)...");
+        
+        // Use ANALYTICAL model
         String newSynopsis = llmClient.call(
             ModelType.ANALYTICAL,
-            "You create concise world snapshot synopses.",
+            "You create concise world snapshot synopses from extracted events.",
             filledPrompt
         );
-
-        log.info("[Synopsis] Generated new synopsis (" + newSynopsis.length() + " chars)");
-
-        history.updateSynopsis(newSynopsis, getWindowSize());
         
-        // ENHANCEMENT: Save synopsis to file for inspection
+        log.info("[Synopsis] Generated new synopsis ({} chars)", newSynopsis.length());
+        
+        history.updateSynopsis(newSynopsis, windowSize);
+        
+        // Save synopsis to file for inspection
         saveSynopsisToFile(newSynopsis, "rolling", ROLLING_SYNOPSIS_DEBUG_FILE);
-
+        
         return newSynopsis;
     }
     
     /**
-     * Generate quick synopsis using template
-     * Uses ANALYTICAL model (Gemini) for speed
-     * Uses synopsis + currentHistory for complete context
+     * Format events for synopsis prompt.
+     * Groups by beat for better organization.
+     */
+    private String formatEventsForSynopsis(List<StanzaEvent> events) {
+        if (events.isEmpty()) {
+            return "[No events recorded]";
+        }
+        
+        // Group by beat number
+        Map<Integer, List<StanzaEvent>> eventsByBeat = events.stream()
+            .collect(Collectors.groupingBy(StanzaEvent::getBeatNumber));
+        
+        StringBuilder sb = new StringBuilder();
+        
+        for (Integer beatNum : eventsByBeat.keySet().stream().sorted().collect(Collectors.toList())) {
+            List<StanzaEvent> beatEvents = eventsByBeat.get(beatNum);
+            
+            sb.append("Beat ").append(beatNum).append(":\n");
+            
+            // Major events first (emphasized)
+            List<StanzaEvent> major = beatEvents.stream()
+                .filter(StanzaEvent::isMajor)
+                .collect(Collectors.toList());
+            
+            List<StanzaEvent> minor = beatEvents.stream()
+                .filter(e -> !e.isMajor())
+                .collect(Collectors.toList());
+            
+            if (!major.isEmpty()) {
+                for (StanzaEvent e : major) {
+                    sb.append("  - Exchange ").append(e.getExchangeNumber())
+                      .append(": ").append(e.getDescription())
+                      .append(" (MAJOR)\n");
+                }
+            }
+            
+            if (!minor.isEmpty()) {
+                for (StanzaEvent e : minor) {
+                    sb.append("  - Exchange ").append(e.getExchangeNumber())
+                      .append(": ").append(e.getDescription())
+                      .append("\n");
+                }
+            }
+            
+            sb.append("\n");
+        }
+        
+        return sb.toString();
+    }
+    
+    /**
+     * Generate quick synopsis using template.
+     * Uses synopsis + currentHistory for complete context.
      */
     public String generateQuickSynopsis(ConversationHistory history) throws Exception {
-
+        
         String synopsis = history.getSynopsis();
         String recentMessages = formatMessagesAsText(history.getAllMessages(), true);
         
         log.info("[QuickSynopsis] Using synopsis (" + synopsis.length() + " chars) + " +
                 "recent messages (" + history.getAllMessages().size() + " messages)");
-
+        
         // Get template and fill it in
         String template = promptBuilder.buildQuickSynopsisPrompt(configService.getUserPersona());
         String filledPrompt = template
             .replace("${previousSnapshot}", synopsis.isEmpty() ? "[Start of stanza]" : synopsis)
             .replace("${conversationText}", recentMessages);
-
+        
         log.info("[QuickSynopsis] Generating quick synopsis...");
-
+        
         // Use ANALYTICAL model
         String result = llmClient.call(
             ModelType.ANALYTICAL,
             filledPrompt,
             "Create the brief narrative summary."
         );
-
+        
         log.info("[QuickSynopsis] Generated (" + result.length() + " chars)");
         
-        // ENHANCEMENT: Save quick synopsis to file
-        saveSynopsisToFile(result, "quick",QUICK_SYNOPSIS_DEBUG_FILE);
-
+        // Save quick synopsis to file
+        saveSynopsisToFile(result, "quick", QUICK_SYNOPSIS_DEBUG_FILE);
+        
         return result;
     }
     
     /**
-     * Extract what changes user wants during pause
-     * Uses ANALYTICAL model (Gemini) for simple extraction
+     * Extract what changes user wants during pause.
      */
     public String generatePauseChanges(ConversationHistory history) throws Exception {
         
@@ -152,17 +246,17 @@ public class SynopsisGeneratorService {
             systemPrompt,
             conversationText
         );
-
+        
         log.info("[Distilled Changes] Generated (" + result.length() + " chars)");
         
-        // ENHANCEMENT: Save quick synopsis to file
-        saveSynopsisToFile(result, "distilled",DISTILLED_CHANGES_DEBUG_FILE);
-
+        // Save to file
+        saveSynopsisToFile(result, "distilled", DISTILLED_CHANGES_DEBUG_FILE);
+        
         return result;
     }
-
+    
     /**
-     * Helper: Format message list as text
+     * Helper: Format message list as text.
      * @param stripOOC If true, removes text in ((double parentheses))
      */
     private String formatMessagesAsText(List<ConversationHistory.Message> messages, boolean stripOOC) {
@@ -194,7 +288,6 @@ public class SynopsisGeneratorService {
     
     /**
      * Remove out-of-character commands in ((double parentheses))
-     * This prevents meta-awareness in synopses
      */
     private String stripOOCCommands(String text) {
         // Remove text in ((double parentheses))
@@ -220,8 +313,7 @@ public class SynopsisGeneratorService {
     }
     
     /**
-     * ENHANCEMENT: Save synopsis to file for debugging
-     * This allows you to check the synopsis even if console output is truncated
+     * Save synopsis to file for debugging.
      */
     private void saveSynopsisToFile(String synopsis, String type, String path) {
         try {
