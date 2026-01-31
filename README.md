@@ -1,126 +1,246 @@
-# Erik — Narrative Simulation Engine
+# Erik - AI-Driven Creative Narrative System
 
-## Overview
+**Erik** is a Java Spring Boot application that provides an interactive storytelling environment powered by dual LLM architecture. It distinguishes between planning conversations (void mode with Erik) and active storytelling (stanza mode with the Narrator), maintaining strict information boundaries and persistent world state.
 
-**Erik** is not a story generator.
-
-It is a **narrative simulation**: a space you enter, where an AI narrator embodies a living scene that responds to what you do, not to what you ask for.
-
-During a session (called a *stanza*), the system creates a consistent fictional world with rules, memory, and emotional continuity. The narrator does not prompt you with "what happens next?" — the world waits for you to act inside it.
-
-This makes Erik closer to a **theatrical space** or **roleplay engine** than to a traditional interactive fiction tool.
+**Latest Updates (January 2026):**
+- ✅ **Strategy Pattern Refactoring** - SessionFlowService and StanzaExtractionService fully refactored
+- ✅ **Configurable Extraction Frequency** - Control cost vs accuracy with `erik.extraction.frequency`
+- ✅ **Phase 2 Complete** - Mid-stanza state extraction fully implemented
+- 🔄 **Phase 3 In Design** - Pre-narrative architect for OOC commands
 
 ---
 
-## How to Experience Erik
+## Table of Contents
 
-Erik is not used like a chatbot.
-
-Once a stanza begins, you are inside a living narrative scene. The narrator will describe what exists and what happens — but it will not ask you what to do next.
-
-You interact by **acting inside the world**:
-- speak to characters
-- move through space
-- make decisions
-- introduce intentions
-
-The world advances in response to what you do, not to prompts like "continue the story".
-
----
-
-## Example Interaction
-
-```
-[Erik]
-"Hey there! Ready to create a new adventure to protagonize?"
-
-> I want to explore an abandoned research facility in the Arctic
-
-[Erik]
-"Ooh, nice. What's your role? Are you part of a team, or solo?"
-
-> Solo expedition, I'm a journalist investigating disappearances
-
-[Erik]
-"Perfect. Tone-wise, are we going tense thriller or full horror?"
-
-> Tense thriller with creeping dread
-
-[Erik]
-"Got it. So: Arctic research facility, you're a solo journalist investigating 
-disappearances, tense thriller with creeping dread. Ready to begin?"
-
-> let's do it
-
-[STANZA START]
-
-[Opening Narration]
-The helicopter's rotors fade into the distance, swallowed by the Arctic wind...
-```
+- [Core Concept](#core-concept)
+- [System Architecture](#system-architecture)
+- [Latest Refactorings](#latest-refactorings)
+- [Stanza Lifecycle](#stanza-lifecycle)
+- [Stanza Memory & Continuation](#stanza-memory--continuation)
+- [Technical Architecture](#technical-architecture)
+- [Tech Stack](#tech-stack)
+- [Running the Project](#running-the-project)
+- [Configuration](#configuration)
+- [Testing](#testing)
 
 ---
 
-## Key Concepts
+## Core Concept
 
-### Two Modes
+### The Two Modes
 
-**VOID Mode** — Planning Space
-- Talk with Erik, your creative assistant
-- Plan and shape your narrative
-- Discuss tone, setting, characters
-- Pause mid-stanza to make adjustments
-- Browse and load previous stanzas
+**VOID MODE (Planning with Erik):**
+- Erik is your creative collaborator
+- Discuss ideas, set up stanzas, reflect on experiences
+- No narrative action - pure planning and conversation
+- Separate conversation history (prevents personality bleed)
 
-**STANZA Mode** — Living Narrative
-- The Narrator takes over
-- Second-person present tense narration
-- You act, the world responds
-- Characters react based on what they know
-- The scene evolves organically
+**STANZA MODE (Active Storytelling):**
+- The Narrator controls the fictional world
+- You experience the story as your character
+- Strict information boundaries prevent knowledge bleeding
+- Rolling synopsis maintains world state
+- **Database persistence** tracks all changes in real-time
 
-### Commands
+### What Makes Erik Different
 
-Commands work naturally or can be made explicit with double parentheses:
+1. **Information Boundaries**
+   - Characters only know what they've observed or been told
+   - User's private backstory is hidden from characters
+   - Separate void/stanza histories prevent context leaking
 
-**System Commands (prefix with `/`):**
-- `/help` — Show all available commands
-- `/list` — List all saved stanzas from the database
-- `/search [keywords]` — Full-text search across all fields
-- `/search setting:[keyword]` — Search by setting field
-- `/search character:[name]` — Search by character name
-- `/load [id]` — Load a stanza into Erik's memory for reference/continuation
-- `/clear` — Clear loaded stanza from memory
+2. **Dual Model Architecture**
+   - Claude Sonnet 4.5 for creative narrative (Erik + Narrator)
+   - Gemini Flash 2.5 for analytical tasks (flag detection, extraction)
+   - Optimizes for quality and cost
 
-**In Void Mode:**
-- `"let's begin"` / `"start"` → Start the stanza
-- Natural conversation with Erik
-- `"show persona"` → Display your persona information
+3. **Persistent World State** (Phase 1 & 2 Complete)
+   - PostgreSQL database tracks everything
+   - Characters, secrets, tensions, events, knowledge
+   - Mid-stanza updates via intelligent extraction
+   - Load previous stanzas for continuation
 
-**In Stanza Mode:**
-- `((pause))` → Pause and return to Erik
-- `((end))` → Request narrative closure and end stanza
-- `((abandon))` → Drop the stanza without ceremony
-- `((add rain to the scene))` → Out-of-character directives to the narrator
+4. **Strategy Pattern Architecture** (New!)
+   - Clean, maintainable, testable code
+   - Each operation isolated in its own strategy
+   - Easy to extend without modifying existing code
 
-**Universal:**
-- `exit` → Close the application
+---
 
-### Lifecycle
+## System Architecture
 
+### Service Layer (After Refactoring)
+
+**Orchestration:**
 ```
-App Start → VOID (planning with Erik)
-  ↓ "start"
-STANZA (active narration)
-  ↓ ((pause))
-VOID (discuss adjustments with Erik)
-  ↓ "continue"
-STANZA (narration resumes with changes)
-  ↓ ((end))
-VOID (reflection with Erik)
-  [Session complete - reflection mode only]
+services/orchestration/
+├── SessionFlowService          # Main orchestrator (50 lines!)
+├── ConversationService         # Unified LLM conversation handling
+├── StanzaCompletionService     # Shared stanza completion logic
+└── strategies/
+    ├── FlowStrategy            # Interface
+    ├── FlowStrategyFactory     # Selects appropriate strategy
+    ├── VoidModeStrategy        # Regular Erik conversation
+    ├── StanzaModeStrategy      # Regular Narrator narration
+    ├── StartStanzaStrategy     # Handle START flag
+    ├── PauseStanzaStrategy     # Handle PAUSE flag
+    ├── ContinueStanzaStrategy  # Handle CONTINUE flag
+    ├── EndStanzaStrategy       # Handle END flag
+    └── AbandonStanzaStrategy   # Handle ABANDON flag
 ```
 
-Abandoned stanzas allow starting fresh. Completed stanzas are saved to the database and end the creative session.
+**State Extraction:**
+```
+services/stanza/
+├── StanzaExtractionService     # Orchestrator (100 lines!)
+└── appliers/
+    ├── ExtractionApplier<T>           # Generic interface
+    ├── ExtractionApplierRegistry      # Type-safe registry
+    ├── EventApplier                   # Apply events
+    ├── KnowledgeTransferApplier       # Apply knowledge
+    ├── SecretRevelationApplier        # Apply secrets
+    ├── TensionChangeApplier           # Apply tensions
+    └── CharacterAppearanceApplier     # Apply appearances
+```
+
+### Refactoring Benefits
+
+**Before:**
+- SessionFlowService: 500+ lines with complex branching
+- StanzaExtractionService: 600+ lines with 5 large methods
+- Code duplication (callErik/callNarrator repeated)
+
+**After:**
+- SessionFlowService: 50 lines, clean delegation
+- StanzaExtractionService: 100 lines, clean delegation
+- Zero duplication, each class has one job
+- Easy to test each strategy independently
+- Adding new features = adding new strategy classes
+
+---
+
+## Latest Refactorings
+
+### 1. Strategy Pattern for SessionFlowService
+
+**What Changed:**
+- Removed 500+ lines of complex switch/if-else logic
+- Each flow operation is now a separate strategy class
+- Factory pattern selects the right strategy
+- Conversation logic unified in ConversationService
+
+**Benefits:**
+- 90% code reduction in main service
+- Zero duplication
+- Open/Closed Principle compliance
+- Easy to add new flags without modifying existing code
+
+### 2. Strategy Pattern for StanzaExtractionService
+
+**What Changed:**
+- Removed 600+ lines of extraction logic
+- Each extraction type has its own applier
+- Registry pattern provides type-safe application
+- Generic interface ensures type safety
+
+**Benefits:**
+- 85% code reduction in main service
+- Each applier independently testable
+- Easy to add new extraction types
+- Type-safe compiler checks
+
+### 3. Configurable Extraction Frequency
+
+**What Changed:**
+- Extraction is now configurable via properties
+- Can extract every N exchanges instead of every exchange
+- Always extract on start/end (configurable)
+- Allows experimentation with cost vs accuracy
+
+**Configuration:**
+```properties
+# Extract every 3rd exchange (67% cost savings)
+erik.extraction.frequency=3
+
+# Global enable/disable
+erik.extraction.enabled=true
+
+# Force extraction on start/end
+erik.extraction.always-extract-on-start=true
+erik.extraction.always-extract-on-end=true
+```
+
+**Benefits:**
+- Control API costs
+- Experiment with narrator resilience
+- Different settings for dev vs prod
+- Detailed logging shows when extraction occurs
+
+---
+
+## Stanza Lifecycle
+
+### Phase 1: Planning (VOID Mode)
+```
+User: "I want to play a male Cinderella at the ball"
+Erik: "Interesting! Who should be present?"
+User: "The prince, my stepsisters, and the fairy godmother"
+Erik: "What secrets are hidden?"
+User: "I'm actually a prince from another kingdom in disguise"
+```
+
+### Phase 2: Initialization
+```
+User: "Let's begin!"
+→ Gemini extracts stanza setup
+→ Database stores:
+  - Characters (user, prince, stepsisters, fairy godmother)
+  - Secrets (user's true identity)
+  - Tensions (will identity be revealed?)
+  - Initial world state
+```
+
+### Phase 3: Active Narration (STANZA Mode)
+```
+User: "I approach the prince nervously"
+→ Narrator: "The prince's eyes meet yours across the ballroom..."
+→ Exchange counter increments
+→ Extraction service analyzes exchange (configurable frequency)
+→ Database updates:
+  - Events: "User approached the prince"
+  - Character presence: Prince now "present"
+  - Tension pressure might increase
+```
+
+### Phase 4: Pause & Reflect
+```
+User: "((pause, I want the fairy godmother to appear))"
+→ Switches to VOID mode
+→ Status: PAUSED
+Erik: "Want me to bring her in when we continue?"
+User: "Yes, and make the stepsisters suspicious"
+→ Changes extracted for next continuation
+```
+
+### Phase 5: Continuation
+```
+User: "Yeah, let's continue"
+→ Switches back to STANZA mode
+→ Status: ACTIVE
+→ Narrator incorporates requested changes
+→ Extraction continues tracking state
+```
+
+### Phase 6: Completion
+```
+User: "((end stanza))"
+→ Narrator provides closing narration
+→ Final extraction (if configured)
+→ Quick synopsis generated
+→ Status: COMPLETED
+→ Everything saved to database
+Erik: "That was a beautiful story! What did you think?"
+```
 
 ---
 
@@ -130,41 +250,23 @@ Abandoned stanzas allow starting fresh. Completed stanzas are saved to the datab
 
 ⚠️ **EXPERIMENTAL FEATURE — UNDER TESTING**
 
-You can load a previously completed stanza into Erik's memory for reference or continuation:
+Load previously completed stanzas:
 
 ```bash
 > /list                    # See all saved stanzas
-> /search vampire romance  # Find stanzas by keywords
-> /load 5                  # Load stanza #5 into Erik's memory
+> /search vampire romance  # Find by keywords
+> /load 5                  # Load stanza #5 into memory
 ```
 
-Once loaded, Erik can:
-- Discuss what happened in that stanza
-- Help you plan a sequel or variation
-- Start a new stanza that continues the story
-
-When you say "let's begin" with a loaded stanza, the system will:
-1. Use the loaded stanza's setup (setting, characters, premise, etc.)
-2. Include `previousEvents` from that stanza
-3. Apply any changes you discussed with Erik during planning
-
-Use `/clear` to remove the loaded stanza from memory if you want to start fresh.
-
-**Note:** This feature is still being tested. Continuation quality depends on how well the original stanza was documented and may vary.
+Once loaded, Erik can reference that stanza when planning new ones.
 
 ### Search Capabilities
 
-The search system supports multiple modes:
-
 ```bash
-/search vampire romance          # Full-text search across all fields
-/search setting:castle           # Search only in setting field  
-/search premise:investigation    # Search only in premise field
-/search tone:horror              # Search only in tone field
-/search character:Derek          # Search by character name
+/search vampire romance          # Full-text search
+/search setting:castle           # Search by field
+/search character:Derek          # Search by character
 ```
-
-Full-text search uses PostgreSQL's built-in text search with GIN indexing for fast results.
 
 ---
 
@@ -172,104 +274,51 @@ Full-text search uses PostgreSQL's built-in text search with GIN indexing for fa
 
 ### Dual Model System
 
-Erik uses two models for optimal performance:
+**Narrative Model** (Claude Sonnet 4.5):
+- Erik (void mode)
+- Narrator (stanza mode)
+- Temperature: 0.6
 
-**Narrative Model** (Claude Sonnet 4.5)
-- Erik (void mode conversations)
-- Narrator (stanza mode narration)
-- Temperature: 0.6 (creative but focused)
-- Max tokens: 3000
+**Analytical Model** (Gemini Flash 2.5):
+- Flag detection
+- Stanza initialization extraction
+- Mid-stanza state extraction
+- Synopsis generation
+- Temperature: 0.3
 
-**Analytical Model** (Gemini Flash 2.5)
-- Flag detection (command parsing)
-- Stanza setup extraction
-- Quick synopsis generation
-- Change distillation during pause
-- World snapshot updates
-- Temperature: 0.3 (precise)
-- Max tokens: 3000
+### Database Schema (PostgreSQL)
 
-### Service Architecture
+**Core Entities:**
+- `persona` - User identity
+- `stanza_records` - Completed stanzas
+- `stanza` - Active/paused stanzas (Phase 2)
+- `stanza_character` - Characters in stanza
+- `fact` - Atomic truths
+- `secret` - Locked facts
+- `character_knowledge` - Who knows what
+- `character_secret_state` - Secret awareness
+- `tension` - Story threads
+- `stanza_event` - Events that occurred
 
-The application follows a clean service-oriented architecture:
+### State Extraction (Phase 2 - Complete)
 
-```
-ConsoleRunner (Controller)
-    ↓
-CommandService ←──────────────────┐ (handles /commands)
-    ↓                             │
-SessionFlowService (Orchestrator) │
-    ├── FlagDetectorService       │
-    ├── SessionAssemblerService   │
-    ├── SystemPromptBuilderService│
-    ├── StanzaExtractorService    │
-    ├── SynopsisGeneratorService  │
-    └── LLMClientService          │
-                                  │
-StanzaRecordRepository ───────────┘ (database access)
-```
+**After each narrator response (configurable):**
+1. Build extraction prompt with current DB state
+2. Call Gemini to analyze the exchange
+3. Parse JSON response into structured data
+4. Apply changes via specialized appliers:
+   - Events → StanzaEvent entries
+   - Knowledge → CharacterKnowledge + Fact entries
+   - Secrets → CharacterSecretState updates
+   - Tensions → Tension pressure/status changes
+   - Appearances → Character presence updates
 
-**Key Services:**
-- **CommandService**: Handles deterministic `/` commands (no LLM needed)
-- **SessionAssemblerService**: Assembles `SessionContext` snapshots for prompts
-- **SystemPromptBuilderService**: Uses `PromptComposer` to build system prompts
-- **SessionFlowService**: Orchestrates mode switching and flag handling
-
-### Memory Management
-
-**Rolling Synopsis System:**
-- Maintains world state across the conversation
-- Updates periodically (configurable threshold)
-- Compresses old exchanges into structured snapshots
-- Keeps recent messages in full context
-- Prevents context window bloat
-
-**Configuration:**
-- `erik.round-window-size`: Number of recent message exchanges to keep (default: 6)
-- `erik.round-threshold-size`: History size that triggers synopsis generation (default: 18)
-
-**World Snapshot Format:**
-```
-EVENT HISTORY: [chronological major events]
-CURRENT STATE - WORLD: [public observable facts]
-CURRENT STATE - USER_ONLY: [private user knowledge]
-CURRENT STATE - CHARACTERS: [what each character knows/believes]
-META: [active rules and OOC conditions]
-```
-
-### Information Boundaries
-
-**Public vs Private Knowledge:**
-- **User Role** (PUBLIC): What characters can observe about the user
-- **User Backstory** (PRIVATE): Secrets, trauma, hidden identity — only the narrator knows
-- Characters can NEVER know private backstory unless explicitly revealed in-scene
-- Characters are NOT psychic — they only know what they observe or are told
-
-**Conversation Isolation:**
-- Void and Stanza have **separate conversation histories**
-- Characters only know what they've learned in-scene
-- Out-of-character directives `((like this))` modify the scene without being narrated
-- Erik personality stays in void mode (synopsis system prevents personality bleed)
-
-### Persistence Layer
-
-**PostgreSQL Database:**
-- **Personas**: User identity (name, pronouns, physical description, details)
-- **Stanza Records**: Completed stanzas with full setup and synopses
-- Automatic timestamps (created_at, updated_at)
-- One-to-many relationship: Persona → StanzaRecords
-- Full-text search with GIN indexing
-
-**Stanza Record Schema:**
-```
-- Quick Synopsis (narrative, ~150 words)
-- Setting, Premise, User Role (public)
-- User Backstory (private)
-- Tone/Genre
-- Characters Present
-- Previous Events (chronological list)
-- Special Rules
-```
+**Extraction Types:**
+- **Events**: What happened ("Derek revealed his identity")
+- **Knowledge Transfers**: Who learned what ("Stiles learned Scott is a werewolf")
+- **Secret Revelations**: Secrets exposed/suspected (UNAWARE → SUSPICIOUS → KNOWS)
+- **Tension Changes**: Story threads escalate/resolve/emerge
+- **Character Appearances**: Who entered/left the scene
 
 ---
 
@@ -277,16 +326,12 @@ META: [active rules and OOC conditions]
 
 - **Language:** Java 17
 - **Framework:** Spring Boot 3.2.1
-- **Database:** PostgreSQL (with JPA/Hibernate)
+- **Database:** PostgreSQL (JPA/Hibernate)
 - **LLM API:** OpenRouter
-- **Models:** Claude Sonnet 4.5 (narrative) + Gemini Flash 2.5 (analytical)
-- **Interface:** Console (current) — designed to extend to REST API
-
-**Dependencies:**
-- Spring Data JPA
-- PostgreSQL JDBC Driver
-- Spring Boot Web (for future REST API)
-- JUnit 5 + Mockito (testing)
+- **Models:** 
+  - Claude Sonnet 4.5 (narrative)
+  - Gemini Flash 2.5 (analytical)
+- **Testing:** JUnit 5 + Mockito
 
 ---
 
@@ -295,333 +340,96 @@ META: [active rules and OOC conditions]
 ### Prerequisites
 - Java 17+
 - Maven
-- PostgreSQL (running locally or accessible remotely)
+- PostgreSQL
 - OpenRouter API key
 
-### Database Setup
+### Quick Start
 
-1. **Install PostgreSQL** (if not already installed)
+1. **Clone and configure:**
 ```bash
-# macOS
-brew install postgresql
-brew services start postgresql
-
-# Ubuntu/Debian
-sudo apt-get install postgresql postgresql-contrib
-sudo service postgresql start
-
-# Windows: Download from postgresql.org
-```
-
-2. **Create Database**
-```bash
-# Connect to PostgreSQL
-psql postgres
-
-# Create database and user
-CREATE DATABASE erik_db;
-CREATE USER your_db_user WITH PASSWORD 'your_db_password';
-GRANT ALL PRIVILEGES ON DATABASE erik_db TO your_db_user;
-\q
-```
-
-3. **Enable Full-Text Search** (optional but recommended)
-```sql
--- Run after the application creates tables (first run)
-ALTER TABLE stanza_records ADD COLUMN IF NOT EXISTS search_vector tsvector;
-
-CREATE INDEX IF NOT EXISTS idx_stanza_search ON stanza_records USING GIN(search_vector);
-
-CREATE OR REPLACE FUNCTION update_search_vector() RETURNS trigger AS $$
-BEGIN
-  NEW.search_vector := 
-    setweight(to_tsvector('english', coalesce(NEW.setting, '')), 'A') ||
-    setweight(to_tsvector('english', coalesce(NEW.premise, '')), 'A') ||
-    setweight(to_tsvector('english', coalesce(NEW.tone, '')), 'B') ||
-    setweight(to_tsvector('english', coalesce(NEW.quick_synopsis, '')), 'C');
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER stanza_search_update BEFORE INSERT OR UPDATE
-ON stanza_records FOR EACH ROW EXECUTE FUNCTION update_search_vector();
-
--- Update existing records
-UPDATE stanza_records SET setting = setting;
-```
-
-4. **Set Environment Variables**
-```bash
-export DB_USER=your_db_user
-export DB_PASS=your_db_password
-export OPENROUTER_API_KEY=your_openrouter_key
-```
-
-### Application Setup
-
-1. **Clone the repository**
-```bash
-git clone <repo-url>
+git clone <repository>
 cd erik-core
+
+# Configure application.properties
+cp src/main/resources/application.properties.template src/main/resources/application.properties
+# Edit with your database credentials and API key
 ```
 
-2. **Configure database connection** (optional — defaults to localhost)
-
-Edit `src/main/resources/application.properties`:
-```properties
-spring.datasource.url=jdbc:postgresql://localhost:5432/erik_db
-spring.datasource.username=${DB_USER}
-spring.datasource.password=${DB_PASS}
-```
-
-3. **Run the application**
+2. **Database setup:**
 ```bash
-mvn clean spring-boot:run
+# Create database
+createdb erik_db
+
+# Run migrations (auto-handled by Hibernate on first run)
 ```
 
-4. **First Run Setup**
-- Application will prompt you to create a persona
-- Enter: name, pronouns, physical description, other details
-- Persona is saved to PostgreSQL database
-- Future runs will load this persona automatically
+3. **Run:**
+```bash
+mvn spring-boot:run
+```
 
-### Configuration
+---
 
-Edit `src/main/resources/application.properties`:
+## Configuration
+
+### Core Settings (application.properties)
 
 ```properties
-# Spring Boot Configuration
-spring.application.name=erik-core
-spring.main.web-application-type=none
-spring.main.banner-mode=off
+# Database
+spring.datasource.url=jdbc:postgresql://localhost:5432/erik_db
+spring.datasource.username=your_username
+spring.datasource.password=your_password
 
-# JPA/Hibernate Settings
-spring.jpa.hibernate.ddl-auto=update
-spring.jpa.show-sql=false
-spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+# LLM API
+erik.api.key=your_openrouter_key
+erik.api.base-url=https://openrouter.ai/api/v1
 
-# Erik - Narrative Model (Claude Sonnet 4.5)
-erik.narrative.model=anthropic/claude-sonnet-4.5
-erik.narrative.temperature=0.6
-erik.narrative.max-tokens=3000
+# Models
+erik.narrative-model=anthropic/claude-sonnet-4.5
+erik.analytical-model=google/gemini-flash-2.5
 
-# Erik - Analytical Model (Gemini Flash 2.5)
-erik.analytical.model=google/gemini-2.5-flash
-erik.analytical.temperature=0.3
-erik.analytical.max-tokens=3000
-
-# Erik - Context Window Settings
-erik.round-window-size=6        # Recent messages to keep
+# Synopsis System
+erik.round-window-size=6        # Recent exchanges to keep
 erik.round-threshold-size=18    # When to generate synopsis
 
-# Logging
-logging.level.root=WARN
-logging.level.com.github.rrousso.erik_core=INFO
+# Extraction Configuration (NEW!)
+erik.extraction.frequency=1                    # Extract every N exchanges
+erik.extraction.enabled=true                   # Global on/off
+erik.extraction.always-extract-on-start=true   # Force extract opening
+erik.extraction.always-extract-on-end=true     # Force extract closing
 ```
 
-### Console Commands
+### Extraction Frequency Guide
 
-Once running:
+**Every exchange (default):**
+```properties
+erik.extraction.frequency=1
 ```
-> I want to do a Cinderella story          # Planning conversation
-> let's begin                              # Start stanza
-> I hesitate                               # In-stanza action
-> ((pause))                                # Pause and return to Erik
-> continue                                 # Resume stanza
-> ((end))                                  # End stanza with closure
-> show persona                             # Display your persona
-> /list                                    # View saved stanzas
-> /search vampire                          # Search stanzas
-> /load 5                                  # Load stanza #5 for continuation
-> /clear                                   # Clear loaded stanza
-> /help                                    # Show all commands
-> exit                                     # Close application
+- Highest accuracy
+- Highest cost
+- Real-time state updates
+
+**Every 3rd exchange (balanced):**
+```properties
+erik.extraction.frequency=3
 ```
+- 67% cost savings
+- Good accuracy
+- Slight lag in state updates
 
----
-
-## Project Structure
-
+**Only start/end (minimal):**
+```properties
+erik.extraction.frequency=999
+erik.extraction.always-extract-on-start=true
+erik.extraction.always-extract-on-end=true
 ```
-erik-core/
-├── src/main/java/com/github/rrousso/erik_core/
-│   ├── config/
-│   │   └── ErikProperties.java           # Configuration properties
-│   ├── controllers/
-│   │   └── ConsoleRunner.java            # Main console interface
-│   ├── entities/
-│   │   ├── CommandResult.java            # Command execution result
-│   │   ├── CompletedStanza.java          # Completed stanza data
-│   │   ├── ConversationHistory.java      # Rolling message history
-│   │   ├── Flag.java                     # System command flags
-│   │   ├── ModelType.java                # Narrative vs Analytical
-│   │   ├── Persona.java                  # User persona entity
-│   │   ├── SessionContext.java           # Immutable context snapshot
-│   │   ├── SessionState.java             # Current session state
-│   │   ├── StanzaMetadata.java           # Stanza configuration
-│   │   ├── StanzaRecord.java             # Persisted stanza entity
-│   │   └── StanzaStatus.java             # Lifecycle states
-│   ├── repositories/
-│   │   ├── PersonaRepository.java        # JPA persona repository
-│   │   └── StanzaRecordRepository.java   # JPA stanza repository (with search)
-│   ├── services/
-│   │   ├── CommandService.java           # Handles /commands
-│   │   ├── ConfigService.java            # Config & persona management
-│   │   ├── FlagDetectorService.java      # Command detection
-│   │   ├── LLMClientService.java         # OpenRouter API client
-│   │   ├── PromptComposer.java           # Fluent prompt builder
-│   │   ├── PromptLoaderService.java      # Load prompt templates
-│   │   ├── SessionAssemblerService.java  # Assembles SessionContext
-│   │   ├── SessionFlowService.java       # Main orchestration
-│   │   ├── StanzaExtractorService.java   # Extract setup from conversation
-│   │   ├── SynopsisGeneratorService.java # Generate synopses
-│   │   └── SystemPromptBuilderService.java # Build system prompts
-│   └── ErikCoreApplication.java          # Spring Boot entry point
-├── src/main/resources/
-│   ├── prompts/
-│   │   ├── analytical/                   # Analytical model prompts
-│   │   │   ├── changes_distiller.txt
-│   │   │   ├── flag_detection.txt
-│   │   │   ├── quick_synopsis.txt
-│   │   │   └── world_snapshot_synopsis.txt
-│   │   ├── erik/                         # Erik (void mode) prompts
-│   │   │   ├── directive_abandoned.txt
-│   │   │   ├── directive_completed.txt
-│   │   │   ├── directive_paused.txt
-│   │   │   ├── directive_planning.txt
-│   │   │   └── personality.txt
-│   │   ├── narrator/                     # Narrator (stanza mode) prompts
-│   │   │   ├── detailed_synopsis.txt
-│   │   │   ├── extraction_prompt.txt
-│   │   │   └── stanza_narrator.txt
-│   │   └── user/
-│   │       └── fictional_frame.txt       # Fictional framing
-│   └── application.properties            # Spring configuration
-├── src/test/java/                        # Unit tests
-├── user_data/                            # Runtime generated files
-│   ├── extracted_stanza.txt              # Debug output
-│   ├── quick_synopsis.txt                # Debug output
-│   └── rolling_synopsis.txt              # Debug output
-├── pom.xml                               # Maven dependencies
-└── README.md                             # This file
-```
-
----
-
-## Project Goals
-
-This project exists to explore:
-
-1. **Narrative Design:** How to create emergent, reactive story spaces
-2. **State Management:** Clean session handling, mode switching, lifecycle control
-3. **Context Efficiency:** Rolling synopsis, dual-model routing, memory compression
-4. **Backend Architecture:** Spring Boot services, separation of concerns, extensibility
-5. **Persistence:** JPA/Hibernate for user identity and narrative history
-
-From a **creative perspective**, Erik explores a different model of human–AI storytelling: treating the AI not as a writer that outputs plot, but as a **world that reacts**.
-
-From a **technical perspective**, it's a serious backend experiment in stateful session design, information boundaries, context management, and persistent narrative storage.
-
----
-
-## Current Status
-
-✅ **Phase 1 Complete** — Core Console Foundation
-- Void/Stanza mode switching
-- Dual model system (narrative + analytical)
-- Rolling synopsis with world snapshots
-- Flag detection and command parsing
-- Pause/continue with change distillation
-- Out-of-character directives
-- Session lifecycle management
-- PostgreSQL persistence (personas + stanza records)
-- Public/private knowledge separation
-
-✅ **Phase 1.5 Complete** — Stanza Management
-- `/list`, `/search`, `/load`, `/clear` commands
-- Full-text search with PostgreSQL GIN indexing
-- Field-specific search (setting, premise, tone, character)
-- CommandService for deterministic operations
-- SessionAssemblerService and SessionContext pattern
-- PromptComposer utility class
-- CommandServiceTest with full coverage
-
-🔨 **In Progress: Stanza Injection** (TESTING)
-- Load previous stanzas for continuation
-- Extract previousEvents from completed stanzas
-- Apply user modifications during planning
-- Convert StanzaRecord → StanzaMetadata for re-entry
-- **Status:** Feature works but needs more testing
-
-📋 **Next: Phase 2** — Enhanced Knowledge & Retrieval
-- Character-specific memory extraction
-- Relationship tracking across stanzas
-- Improved context injection per character
-- Multi-persona support
-
-📋 **Future: Phase 3** — REST API & Web Interface
-- Spring Boot REST API
-- React frontend
-- Multi-user sessions
-- Real-time collaboration
-
----
-
-## Database Schema
-
-### Personas Table
-```sql
-CREATE TABLE personas (
-    id BIGSERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    pronouns VARCHAR(255),
-    description VARCHAR(1000),
-    other_details VARCHAR(1000),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-### Stanza Records Table
-```sql
-CREATE TABLE stanza_records (
-    id BIGSERIAL PRIMARY KEY,
-    persona_id BIGINT NOT NULL REFERENCES personas(id),
-    quick_synopsis VARCHAR(2000),
-    setting VARCHAR(500),
-    premise VARCHAR(1000),
-    user_role VARCHAR(500),
-    user_backstory VARCHAR(500),
-    tone VARCHAR(200),
-    search_vector tsvector,  -- For full-text search
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE stanza_characters (
-    stanza_id BIGINT NOT NULL REFERENCES stanza_records(id),
-    character_name VARCHAR(255)
-);
-
-CREATE TABLE stanza_events (
-    stanza_id BIGINT NOT NULL REFERENCES stanza_records(id),
-    event VARCHAR(500)
-);
-
-CREATE TABLE stanza_rules (
-    stanza_id BIGINT NOT NULL REFERENCES stanza_records(id),
-    rule VARCHAR(500)
-);
-
--- Full-text search index
-CREATE INDEX idx_stanza_search ON stanza_records USING GIN(search_vector);
-```
+- 90% cost savings
+- Experimental accuracy
+- Good for short stanzas
 
 ---
 
 ## Testing
-
-The project includes comprehensive unit tests:
 
 ```bash
 # Run all tests
@@ -630,34 +438,52 @@ mvn test
 # Run specific test
 mvn test -Dtest=SessionFlowServiceTest
 
-# Run tests with coverage
+# Run with coverage
 mvn clean test jacoco:report
 ```
 
 **Test Coverage:**
-- `ConversationHistoryTest`: Rolling synopsis and message management
-- `StanzaSetupTest`: Stanza configuration parsing
-- `FlagDetectorServiceTest`: Command detection logic
-- `SessionFlowServiceTest`: Core flow orchestration
-- `StanzaExtractorServiceTest`: Setup extraction from conversations
-- `SynopsisGeneratorServiceTest`: Synopsis generation
-- `CommandServiceTest`: `/` command processing
+- ✅ ConversationHistoryTest
+- ✅ FlagDetectorServiceTest
+- ✅ SessionFlowServiceTest (refactored)
+- ✅ StanzaExtractionServiceTest
+- ✅ SynopsisGeneratorServiceTest
+- ✅ CommandServiceTest
+- 🔄 Strategy tests (in progress)
+
+---
+
+## Current Status
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| **Phase 1** | ✅ Complete | Persistence foundation |
+| **Phase 2** | ✅ Complete | Mid-stanza extraction |
+| **Refactoring** | ✅ Complete | Strategy patterns applied |
+| **Phase 3** | 📋 Designed | Pre-narrative architect (OOC commands) |
 
 ---
 
 ## Why This Project Exists
 
-Erik exists to explore a different model of human–AI storytelling:
+Erik explores a different model of human-AI storytelling:
 
-Instead of treating the AI as a writer that outputs plot,  
-Erik treats the AI as a **world that reacts**.
+**Not:** AI writes plot for you to read  
+**Instead:** AI creates a world that reacts to YOU
 
-The user is not directing a story.  
-They are **present inside a scene**.
+The user is present INSIDE the scene, not directing from outside.
 
-This project is designed as both:
-- a creative narrative system
-- and a clean, extensible Spring Boot architecture
+---
+
+## Architecture Principles
+
+- **Clear separation** between void/stanza modes
+- **Information boundaries** prevent knowledge bleeding
+- **Strategy patterns** for maintainability
+- **Database persistence** for world memory
+- **Dual model routing** optimizes cost/quality
+- **External prompts** for easy iteration
+- **SOLID principles** throughout
 
 ---
 
@@ -666,75 +492,3 @@ This project is designed as both:
 **Rafael Rousso**  
 Backend / Java Developer  
 Buenos Aires, Argentina
-
----
-
-## Notes for Developers
-
-This project prioritizes **clarity over completeness**. The architecture is intentionally modular to support future extensions (REST API, persistence, multi-user, React frontend).
-
-**Key Design Principles:**
-- Strong separation between modes (void/stanza)
-- Separate conversation histories prevent information bleed
-- Dual model routing optimizes cost and quality
-- Prompts are external files for easy iteration
-- Services are Spring-managed for testability
-- State is explicit and centralized
-- Public/private knowledge boundaries enforced
-- Database persistence for long-term memory
-- Commands separated from LLM-driven conversation
-
-**Important Implementation Details:**
-
-1. **Synopsis System**: Uses `ConversationHistory` with rolling window
-   - Keeps recent messages for immediate context
-   - Generates synopsis when threshold exceeded
-   - Old messages condensed, recent messages preserved
-   - Separate histories for void and stanza modes
-
-2. **Knowledge Separation**: StanzaMetadata has two fields
-   - `userRole` (PUBLIC): What characters can observe
-   - `userBackstory` (PRIVATE): Narrator-only secrets
-   - Extraction prompt enforces this distinction
-
-3. **Flag Detection**: Pre-filters input using analytical model
-   - Detects commands before narrative models called
-   - Uses conversation context for disambiguation
-   - Validates flags against current status
-
-4. **Persistence**: JPA/Hibernate with PostgreSQL
-   - Automatic schema generation (ddl-auto=update)
-   - Timestamped entities (created_at, updated_at)
-   - Element collections for lists (characters, rules, events)
-   - Full-text search with GIN indexing
-
-5. **Command System**: Deterministic operations bypass LLM
-   - `/` prefix triggers CommandService
-   - Results return immediately (no API calls)
-   - Commands can modify SessionState (e.g., `/load`)
-
-6. **Context Assembly**: SessionAssemblerService + SessionContext
-   - Immutable snapshots for each LLM call
-   - Builder pattern for clean construction
-   - Separates "what do we know" from "how do we render it"
-
-7. **Prompt Composition**: PromptComposer utility
-   - Fluent API for building prompts
-   - Conditional sections with `.sectionIf()`
-   - Automatic dividers and labeling
-
----
-
-## License
-
-This project is currently unlicensed and for portfolio/educational purposes.
-
----
-
-## Acknowledgments
-
-This project explores narrative AI through the lens of:
-- Interactive fiction traditions
-- Tabletop roleplaying game design
-- Backend service architecture
-- Context window optimization techniques

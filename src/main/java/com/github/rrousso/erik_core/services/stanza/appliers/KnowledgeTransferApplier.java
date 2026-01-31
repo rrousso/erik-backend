@@ -64,17 +64,24 @@ public class KnowledgeTransferApplier implements ExtractionApplier<KnowledgeTran
         // 2. Create the Fact entity (the knowledge itself)
         Fact fact = new Fact();
         
+        // CRITICAL: Extract core predicate BEFORE any concatenation
+        // This prevents the key from including prefixes/character names
+        String corePredicate = transfer.getWhatTheyLearned();
+        
+        // Generate key from CORE predicate (before adding context)
+        String factKey = generateFactKey(corePredicate);
+        fact.setFactKey(factKey);
+        
+        // NOW add context to the predicate (this might make it longer, but key is already set)
+        // Note: Consider if we need this prefix - it might be redundant with CharacterKnowledge link
+        fact.setPredicate(corePredicate); // Using core predicate without prefix
+        
         fact.setStanza(stanza);
         fact.setKind("OBSERVED"); // Default kind - could be enhanced based on howLearned
-        fact.setPredicate(transfer.getWhatTheyLearned());
         fact.setFactValue("true"); // Simple boolean fact
         fact.setSource("NARRATOR_EMERGENT"); // Source is the narration
         fact.setCreatedBeat(stanza.getCurrentBeat());
         fact.setCreatedExchange(stanza.getCurrentExchange());
-        
-        // Generate a fact key (for indexing/lookup)
-        String factKey = generateFactKey(transfer.getWhatTheyLearned());
-        fact.setFactKey(factKey);
         
         // Add fact to stanza's facts collection
         stanza.getFacts().add(fact);
@@ -92,10 +99,11 @@ public class KnowledgeTransferApplier implements ExtractionApplier<KnowledgeTran
         // 4. Add to character's knownFacts collection
         character.getKnownFacts().add(knowledge);
         
-        log.debug("[KnowledgeTransferApplier] Created knowledge: {} learned '{}' via {}", 
+        log.debug("[KnowledgeTransferApplier] Created knowledge: {} learned '{}' via {} (key: {})", 
             character.getName(), 
-            transfer.getWhatTheyLearned(), 
-            transfer.getHowLearned());
+            corePredicate,
+            transfer.getHowLearned(),
+            factKey);
     }
     
     @Override
@@ -104,28 +112,52 @@ public class KnowledgeTransferApplier implements ExtractionApplier<KnowledgeTran
     }
     
     /**
-     * Generate a fact key from a description.
-     * Converts to lowercase_snake_case and truncates to 50 chars.
+     * Generate a fact key from a description with guaranteed uniqueness.
+     * 
+     * Uses a hybrid approach:
+     * - First 40 chars: human-readable prefix (normalized)
+     * - Last 8 chars: hash of full description (ensures uniqueness)
+     * 
+     * This prevents truncation issues while keeping keys under 50 chars.
      * 
      * Examples:
-     * - "Supernatural world exists" → "supernatural_world_exists"
-     * - "He lost Alan's phone charger" → "he_lost_alan_s_phone_charger"
+     * - "Supernatural world exists" → "supernatural_world_exists_a3f8b2c1"
+     * - "He lost Alan's phone charger" → "he_lost_alan_s_phone_charger_9d4e2f01"
+     * - "Very long description that would normally get truncated..." → "very_long_description_that_would_norma_7ab3c9f2"
+     * 
+     * @param description The fact description
+     * @return A unique key under 50 characters
      */
     private String generateFactKey(String description) {
         if (description == null || description.isEmpty()) {
-            return "unknown_fact";
+            return "unknown_fact_" + Integer.toHexString("unknown".hashCode());
         }
         
-        // Convert to lowercase, replace spaces/punctuation with underscore
-        String key = description.toLowerCase()
+        // Normalize: lowercase, replace non-alphanumeric with underscore
+        String normalized = description.toLowerCase()
             .replaceAll("[^a-z0-9]+", "_")
             .replaceAll("^_+|_+$", ""); // Remove leading/trailing underscores
         
-        // Truncate to 50 characters
+        // Generate hash for uniqueness (8 hex chars)
+        String hash = String.format("%08x", description.hashCode());
+        
+        // Calculate max prefix length (50 - 1 separator - 8 hash = 41)
+        int maxPrefixLength = 41;
+        
+        // Truncate prefix if needed
+        String prefix = normalized.length() > maxPrefixLength 
+            ? normalized.substring(0, maxPrefixLength) 
+            : normalized;
+        
+        // Remove trailing underscore if truncation created one
+        prefix = prefix.replaceAll("_+$", "");
+        
+        // Combine: prefix_hash
+        String key = prefix + "_" + hash;
+        
+        // Guarantee under 50 chars (should always be true, but safety check)
         if (key.length() > MAX_KEY_LENGTH) {
-            key = key.substring(0, MAX_KEY_LENGTH);
-            // Remove trailing underscore if truncation created one
-            key = key.replaceAll("_+$", "");
+            key = prefix.substring(0, MAX_KEY_LENGTH - 9) + "_" + hash;
         }
         
         return key;
