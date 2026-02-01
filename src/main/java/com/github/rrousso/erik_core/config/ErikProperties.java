@@ -5,6 +5,8 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * Spring Boot configuration properties for Erik with dual model support
+ * 
+ * UPDATED: Added debug configuration for controlling debug file output
  */
 @Configuration
 @ConfigurationProperties(prefix = "erik")
@@ -13,6 +15,7 @@ public class ErikProperties {
     // Nested model configurations
     private NarrativeConfig narrative = new NarrativeConfig();
     private AnalyticalConfig analytical = new AnalyticalConfig();
+    private DebugConfig debug = new DebugConfig();  // NEW
     
     // Shared configuration
     private String apiKey;
@@ -84,6 +87,33 @@ public class ErikProperties {
         }
     }
     
+    /**
+     * Configuration for debug output.
+     * 
+     * Controls whether debug files are written to disk.
+     * Useful for development (enabled) vs production (disabled).
+     */
+    public static class DebugConfig {
+        private boolean enabled = false;  // Disabled by default
+        private String outputDir = "user_data/debug";
+        
+        public boolean isEnabled() {
+            return enabled;
+        }
+        
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+        
+        public String getOutputDir() {
+            return outputDir;
+        }
+        
+        public void setOutputDir(String outputDir) {
+            this.outputDir = outputDir;
+        }
+    }
+    
     // Getters and setters for nested configs
     public NarrativeConfig getNarrative() {
         return narrative;
@@ -99,6 +129,14 @@ public class ErikProperties {
     
     public void setAnalytical(AnalyticalConfig analytical) {
         this.analytical = analytical;
+    }
+    
+    public DebugConfig getDebug() {
+        return debug;
+    }
+    
+    public void setDebug(DebugConfig debug) {
+        this.debug = debug;
     }
     
     // Shared config getters/setters

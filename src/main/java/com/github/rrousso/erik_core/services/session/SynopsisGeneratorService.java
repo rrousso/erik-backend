@@ -64,7 +64,7 @@ public class SynopsisGeneratorService {
         this.personaService = personaService;
         this.synopsisConfig = synopsisConfig;
     }
-    
+     
     /** 
      * Generate rolling synopsis using world_snapshot_synopsis template.
      * 
