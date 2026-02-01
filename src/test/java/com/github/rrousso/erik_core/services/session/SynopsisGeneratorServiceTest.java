@@ -14,7 +14,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.github.rrousso.erik_core.domain.enums.ModelType;
 import com.github.rrousso.erik_core.domain.models.ConversationHistory;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
-import com.github.rrousso.erik_core.services.config.ConfigService;
+import com.github.rrousso.erik_core.services.config.PersonaService;
+import com.github.rrousso.erik_core.services.config.SynopsisConfigService;
 import com.github.rrousso.erik_core.services.llm.LLMClientService;
 import com.github.rrousso.erik_core.services.prompt.SystemPromptBuilderService;
 
@@ -29,7 +30,10 @@ public class SynopsisGeneratorServiceTest {
 	private SystemPromptBuilderService promptBuilder;
     
 	@Mock
-	private ConfigService configService;
+    private SynopsisConfigService synopsisConfig;
+	
+	@Mock
+    private PersonaService personaService;;
 	
 	@Mock
 	private Stanza mockStanza;
@@ -38,7 +42,7 @@ public class SynopsisGeneratorServiceTest {
 	
 	@BeforeEach
 	void setUp(){
-		generator = new SynopsisGeneratorService(llmClient, promptBuilder, configService);
+		generator = new SynopsisGeneratorService(llmClient, promptBuilder, personaService, synopsisConfig);
 	}
 	
 	@Test
@@ -52,13 +56,13 @@ public class SynopsisGeneratorServiceTest {
     	history.addUserMessage("I do that.");
     	history.addAssistantMessage("And here are the consequences!");
 		
-    	when(configService.getThresholdSize()).thenReturn(4);
+    	when(synopsisConfig.getThresholdSize()).thenReturn(4);
     	
-		when(configService.getWindowSize()).thenReturn(2);
+		when(synopsisConfig.getWindowSize()).thenReturn(2);
 		
-		when(configService.getUserPersona()).thenReturn("Persona String");
+		when(personaService.getUserPersona()).thenReturn("Persona String");
 		
-    	when(promptBuilder.buildWorldSnapshotPrompt(configService.getUserPersona()))
+    	when(promptBuilder.buildWorldSnapshotPrompt(personaService.getUserPersona()))
         .thenReturn("Mock prompt template");
     	
         when(llmClient.call(
@@ -80,7 +84,7 @@ public class SynopsisGeneratorServiceTest {
 		history.addUserMessage("I do this.");
 		history.addAssistantMessage("And the world reacts to it!");
     	
-    	when(configService.getThresholdSize()).thenReturn(4);
+    	when(synopsisConfig.getThresholdSize()).thenReturn(4);
         
     	String result = generator.generateSynopsis(history, mockStanza);
         
@@ -98,9 +102,9 @@ public class SynopsisGeneratorServiceTest {
 		history.addUserMessage("I do this.");
 		history.addAssistantMessage("And the world reacts to it!");
     	
-    	when(configService.getThresholdSize()).thenReturn(2);
+    	when(synopsisConfig.getThresholdSize()).thenReturn(2);
     	
-		when(configService.getWindowSize()).thenReturn(2);
+		when(synopsisConfig.getWindowSize()).thenReturn(2);
         
 		String result = generator.generateSynopsis(history, mockStanza);
         
@@ -121,9 +125,9 @@ public class SynopsisGeneratorServiceTest {
     	history.addUserMessage("I do that.");
     	history.addAssistantMessage("And here are the consequences!");
     	
-    	when(configService.getUserPersona()).thenReturn("Persona String");
+    	when(personaService.getUserPersona()).thenReturn("Persona String");
     	
-    	when(promptBuilder.buildQuickSynopsisPrompt(configService.getUserPersona()))
+    	when(promptBuilder.buildQuickSynopsisPrompt(personaService.getUserPersona()))
         .thenReturn("Mock prompt template");
     	
         when(llmClient.call(
@@ -170,7 +174,7 @@ public class SynopsisGeneratorServiceTest {
     	history.addUserMessage("I do that.");
     	history.addAssistantMessage("And here are the consequences!");
     	
-    	when(configService.getThresholdSize()).thenReturn(4);
+    	when(synopsisConfig.getThresholdSize()).thenReturn(4);
         
         assertTrue(generator.shouldGenerateSynopsis(history));
 	}
@@ -184,10 +188,10 @@ public class SynopsisGeneratorServiceTest {
     	history.addUserMessage("I do that.");
     	history.addAssistantMessage("And here are the consequences!");
 	    
-	    when(configService.getThresholdSize()).thenReturn(4);
-	    when(configService.getWindowSize()).thenReturn(2);
-	    when(configService.getUserPersona()).thenReturn("Persona String");
-	    when(promptBuilder.buildWorldSnapshotPrompt(configService.getUserPersona())).thenReturn("prompt");
+	    when(synopsisConfig.getThresholdSize()).thenReturn(4);
+	    when(synopsisConfig.getWindowSize()).thenReturn(2);
+	    when(personaService.getUserPersona()).thenReturn("Persona String");
+	    when(promptBuilder.buildWorldSnapshotPrompt(personaService.getUserPersona())).thenReturn("prompt");
 	    
 	    when(llmClient.call(eq(ModelType.ANALYTICAL), anyString(), anyString()))
 	        .thenThrow(new RuntimeException("API Error"));

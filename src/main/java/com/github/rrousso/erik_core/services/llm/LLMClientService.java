@@ -4,9 +4,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.rrousso.erik_core.domain.enums.ModelType;
 import com.github.rrousso.erik_core.domain.models.ConversationHistory;
-import com.github.rrousso.erik_core.services.config.ConfigService;
+import com.github.rrousso.erik_core.dto.openrouter.OpenRouterError;
+import com.github.rrousso.erik_core.dto.openrouter.OpenRouterResponse;
+import com.github.rrousso.erik_core.services.config.LLMConfigService;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -20,6 +23,8 @@ import java.util.Objects;
 /**
  * Spring-managed LLM client service with support for multiple model types.
  * Routes calls to appropriate models based on task type.
+ * 
+ * REFACTORED: Now uses Jackson ObjectMapper for robust JSON parsing instead of manual string manipulation.
  */
 @Service
 public class LLMClientService {
@@ -31,10 +36,12 @@ public class LLMClientService {
     private static final int REQUEST_TIMEOUT_SECONDS = 120;
     
     private final HttpClient client;
-    private final ConfigService configService;
+    private final LLMConfigService configService;
+    private final ObjectMapper objectMapper;
     
-    public LLMClientService(ConfigService configService) {
+    public LLMClientService(LLMConfigService configService) {
         this.configService = configService;
+        this.objectMapper = new ObjectMapper();
         
         // Configure HTTP client with timeouts
         this.client = HttpClient.newBuilder()
@@ -166,14 +173,14 @@ public class LLMClientService {
     private ModelConfig getModelConfig(ModelType modelType) {
         return switch (modelType) {
             case NARRATIVE -> new ModelConfig(
-                configService.getNarrative().getModel(),
-                configService.getNarrative().getTemperature(),
-                configService.getNarrative().getMaxTokens()
+                configService.getNarrativeConfig().getModel(),
+                configService.getNarrativeConfig().getTemperature(),
+                configService.getNarrativeConfig().getMaxTokens()
             );
             case ANALYTICAL -> new ModelConfig(
-                configService.getAnalytical().getModel(),
-                configService.getAnalytical().getTemperature(),
-                configService.getAnalytical().getMaxTokens()
+                configService.getAnalyticalConfig().getModel(),
+                configService.getAnalyticalConfig().getTemperature(),
+                configService.getAnalyticalConfig().getMaxTokens()
             );
         };
     }
@@ -185,7 +192,8 @@ public class LLMClientService {
         String apiKey = configService.getApiKey();
         if (apiKey == null || apiKey.isEmpty()) {
             log.error("API key not configured");
-            throw new RuntimeException("API key not configured. Set OPENROUTER_API_KEY environment variable or in application.yml");
+            throw new RuntimeException("API key not configured. " +
+                "Set OPENROUTER_API_KEY environment variable or in application.yml");
         }
 
         log.debug("Sending request to OpenRouter API...");
@@ -205,11 +213,14 @@ public class LLMClientService {
         log.info("Received response (HTTP {})", response.statusCode());
         log.debug("Response body length: {} chars", response.body().length());
 
-        String extractedContent = extractContent(response.body());
+        String extractedContent = parseResponse(response.body());
 
         return extractedContent;
     }
 
+    /**
+     * Escape string for JSON (still needed for building request body)
+     */
     private String jsonEscape(String text) {
         return "\"" + text
             .replace("\\", "\\\\")
@@ -219,74 +230,69 @@ public class LLMClientService {
             .replace("\t", "\\t") + "\"";
     }
 
-    private String extractContent(String json) {
-        if (json.contains("\"error\"")) {
-            log.error("Error in API response: {}", json);
-            return "[ERROR IN RESPONSE]: " + json;
-        }
-        
-        int contentIdx = json.indexOf("\"content\":");
-        if (contentIdx == -1) {
-            log.error("No content field found in response");
-            return "[ERROR: No content field found]";
-        }
-        
-        int start = json.indexOf("\"", contentIdx + 10);
-        if (start == -1) {
-            log.error("Malformed content field in response");
-            return "[ERROR: Malformed content field]";
-        }
-        
-        StringBuilder content = new StringBuilder();
-        int i = start + 1;
-        
-        while (i < json.length()) {
-            char c = json.charAt(i);
-            
-            if (c == '\\' && i + 1 < json.length()) {
-                char next = json.charAt(i + 1);
-                if (next == 'n') {
-                    content.append('\n');
-                    i += 2;
-                } else if (next == '"') {
-                    content.append('"');
-                    i += 2;
-                } else if (next == '\\') {
-                    content.append('\\');
-                    i += 2;
-                } else if (next == 'r') {
-                    content.append('\r');
-                    i += 2;
-                } else if (next == 't') {
-                    content.append('\t');
-                    i += 2;
-                } else {
-                    content.append(c);
-                    i++;
-                }
-            } else if (c == '"') {
-                break;
-            } else {
-                content.append(c);
-                i++;
+    /**
+     * Parse OpenRouter API response using Jackson.
+     * 
+     * REFACTORED: Replaced ~50 lines of manual char-by-char parsing with Jackson ObjectMapper.
+     * 
+     * Handles:
+     * - Successful responses: extracts content from first choice
+     * - Error responses: throws exception with detailed error message
+     * - Malformed JSON: throws exception with parsing error
+     * 
+     * @param responseBody Raw JSON response from OpenRouter API
+     * @return The content text from the assistant's message
+     * @throws Exception if response contains error or cannot be parsed
+     */
+    private String parseResponse(String responseBody) throws Exception {
+        // First, try to parse as error response
+        if (responseBody.contains("\"error\"")) {
+            try {
+                OpenRouterError errorResponse = objectMapper.readValue(responseBody, OpenRouterError.class);
+                String errorMsg = errorResponse.toString();
+                log.error("OpenRouter API returned error: {}", errorMsg);
+                throw new RuntimeException("OpenRouter API Error: " + errorMsg);
+            } catch (Exception e) {
+                // If error parsing fails, log the raw response
+                log.error("Failed to parse error response: {}", responseBody);
+                throw new RuntimeException("OpenRouter API Error (unparseable): " + responseBody);
             }
         }
         
-        return content.toString();
+        // Parse as successful response
+        try {
+            OpenRouterResponse successResponse = objectMapper.readValue(responseBody, OpenRouterResponse.class);
+            
+            String content = successResponse.getContent();
+            
+            if (content == null) {
+                log.error("No content in OpenRouter response. Choices: {}", 
+                    successResponse.getChoices() != null ? successResponse.getChoices().size() : 0);
+                throw new RuntimeException("No content in OpenRouter response");
+            }
+            
+            log.debug("Successfully extracted content ({} chars)", content.length());
+            return content;
+            
+        } catch (Exception e) {
+            log.error("Failed to parse OpenRouter response", e);
+            log.debug("Response body: {}", responseBody);
+            throw new RuntimeException("Failed to parse OpenRouter response: " + e.getMessage(), e);
+        }
     }
     
     /**
      * Get current narrative model name
      */
     public String getNarrativeModel() {
-        return configService.getNarrative().getModel();
+        return configService.getNarrativeConfig().getModel();
     }
     
     /**
      * Get current analytical model name
      */
     public String getAnalyticalModel() {
-        return configService.getAnalytical().getModel();
+        return configService.getAnalyticalConfig().getModel();
     }
     
     /**

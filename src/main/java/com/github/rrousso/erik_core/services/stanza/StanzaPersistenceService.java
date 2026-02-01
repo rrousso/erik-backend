@@ -89,7 +89,7 @@ public class StanzaPersistenceService {
             StanzaCharacter character = createCharacterEntity(stanza, charData, "explicit");
             stanza.getCharacters().add(character);
         }
-        
+         
         // 5. Create likely characters
         for (var charData : initialized.getLikelyCharacters()) {
             StanzaCharacter character = createCharacterEntity(stanza, charData, "likely");

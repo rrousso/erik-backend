@@ -18,7 +18,7 @@ import com.github.rrousso.erik_core.domain.valueobjects.CompletedStanza;
 import com.github.rrousso.erik_core.dto.initialization.InitializedStanza;
 import com.github.rrousso.erik_core.persistence.entities.Persona;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
-import com.github.rrousso.erik_core.services.config.ConfigService;
+import com.github.rrousso.erik_core.services.config.PersonaService;
 import com.github.rrousso.erik_core.services.stanza.StanzaPersistenceService;
 
 /**
@@ -39,7 +39,7 @@ import com.github.rrousso.erik_core.services.stanza.StanzaPersistenceService;
 public class SessionAssemblerServiceTest {
     
     @Mock
-    private ConfigService configService;
+    private PersonaService configService;
     
     @Mock
     private StanzaPersistenceService persistenceService;

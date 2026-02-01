@@ -9,7 +9,7 @@ import com.github.rrousso.erik_core.domain.models.ConversationHistory;
 import com.github.rrousso.erik_core.domain.models.SessionContext;
 import com.github.rrousso.erik_core.domain.models.SessionState;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
-import com.github.rrousso.erik_core.services.config.ConfigService;
+import com.github.rrousso.erik_core.services.config.PersonaService;
 import com.github.rrousso.erik_core.services.stanza.StanzaPersistenceService;
 
 /**
@@ -32,10 +32,10 @@ public class SessionAssemblerService {
     
     private static final Logger log = LoggerFactory.getLogger(SessionAssemblerService.class);
     
-    private final ConfigService configService;
+    private final PersonaService configService;
     private final StanzaPersistenceService persistenceService;
     
-    public SessionAssemblerService(ConfigService configService, StanzaPersistenceService persistenceService) {
+    public SessionAssemblerService(PersonaService configService, StanzaPersistenceService persistenceService) {
         this.configService = configService;
         this.persistenceService = persistenceService;
     }

@@ -6,7 +6,8 @@ import com.github.rrousso.erik_core.domain.enums.ModelType;
 import com.github.rrousso.erik_core.domain.models.ConversationHistory;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
 import com.github.rrousso.erik_core.persistence.entities.StanzaEvent;
-import com.github.rrousso.erik_core.services.config.ConfigService;
+import com.github.rrousso.erik_core.services.config.PersonaService;
+import com.github.rrousso.erik_core.services.config.SynopsisConfigService;
 import com.github.rrousso.erik_core.services.llm.LLMClientService;
 import com.github.rrousso.erik_core.services.prompt.SystemPromptBuilderService;
 
@@ -45,7 +46,8 @@ public class SynopsisGeneratorService {
     
     private final LLMClientService llmClient;
     private final SystemPromptBuilderService promptBuilder;
-    private final ConfigService configService;
+    private final SynopsisConfigService synopsisConfig;
+    private final PersonaService personaService;
     
     // File to save synopsis for debugging
     private static final String QUICK_SYNOPSIS_DEBUG_FILE = "user_data/quick_synopsis.txt";
@@ -55,10 +57,12 @@ public class SynopsisGeneratorService {
     public SynopsisGeneratorService(
             LLMClientService llmClient, 
             SystemPromptBuilderService promptBuilder, 
-            ConfigService configService) {
+            PersonaService personaService,
+            SynopsisConfigService synopsisConfig) {
         this.llmClient = llmClient;
         this.promptBuilder = promptBuilder;
-        this.configService = configService;
+        this.personaService = personaService;
+        this.synopsisConfig = synopsisConfig;
     }
     
     /** 
@@ -120,7 +124,7 @@ public class SynopsisGeneratorService {
         log.info("[Synopsis] Previous synopsis ({} chars)", previousSynopsis.length());
         
         // Get template and fill it in
-        String template = promptBuilder.buildWorldSnapshotPrompt(configService.getUserPersona());
+        String template = promptBuilder.buildWorldSnapshotPrompt(personaService.getUserPersona());
         String filledPrompt = template
             .replace("${previousSnapshot}", previousSynopsis)
             .replace("${extractedEvents}", eventsText)
@@ -209,7 +213,7 @@ public class SynopsisGeneratorService {
                 "recent messages (" + history.getAllMessages().size() + " messages)");
         
         // Get template and fill it in
-        String template = promptBuilder.buildQuickSynopsisPrompt(configService.getUserPersona());
+        String template = promptBuilder.buildQuickSynopsisPrompt(personaService.getUserPersona());
         String filledPrompt = template
             .replace("${previousSnapshot}", synopsis.isEmpty() ? "[Start of stanza]" : synopsis)
             .replace("${conversationText}", recentMessages);
@@ -305,11 +309,11 @@ public class SynopsisGeneratorService {
     }
     
     private int getWindowSize() {
-        return configService.getWindowSize();
+        return synopsisConfig.getWindowSize();
     }
     
     private int getSynopsisThreshold() {
-        return configService.getThresholdSize();
+        return synopsisConfig.getThresholdSize();
     }
     
     /**
