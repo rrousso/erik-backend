@@ -1,4 +1,4 @@
-package com.github.rrousso.erik_core.services;
+package com.github.rrousso.erik_core.services.session;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -13,10 +13,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.github.rrousso.erik_core.domain.enums.ModelType;
 import com.github.rrousso.erik_core.domain.models.ConversationHistory;
+import com.github.rrousso.erik_core.persistence.entities.Stanza;
 import com.github.rrousso.erik_core.services.config.ConfigService;
 import com.github.rrousso.erik_core.services.llm.LLMClientService;
 import com.github.rrousso.erik_core.services.prompt.SystemPromptBuilderService;
-import com.github.rrousso.erik_core.services.session.SynopsisGeneratorService;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Synopsis Generator Service Test")
@@ -30,6 +30,9 @@ public class SynopsisGeneratorServiceTest {
     
 	@Mock
 	private ConfigService configService;
+	
+	@Mock
+	private Stanza mockStanza;
 	
 	private SynopsisGeneratorService generator;
 	
@@ -64,7 +67,7 @@ public class SynopsisGeneratorServiceTest {
                 anyString()
             )).thenReturn("new synopsis");
         
-        generator.generateSynopsis(history);
+        generator.generateSynopsis(history, mockStanza);
         
         assertEquals("new synopsis", history.getSynopsis());
 	}
@@ -79,7 +82,7 @@ public class SynopsisGeneratorServiceTest {
     	
     	when(configService.getThresholdSize()).thenReturn(4);
         
-    	String result = generator.generateSynopsis(history);
+    	String result = generator.generateSynopsis(history, mockStanza);
         
         assertEquals("", result);
         assertEquals("", history.getSynopsis());
@@ -99,7 +102,7 @@ public class SynopsisGeneratorServiceTest {
     	
 		when(configService.getWindowSize()).thenReturn(2);
         
-		String result = generator.generateSynopsis(history);
+		String result = generator.generateSynopsis(history, mockStanza);
         
         assertEquals("", result);
         assertEquals("", history.getSynopsis());
@@ -190,7 +193,7 @@ public class SynopsisGeneratorServiceTest {
 	        .thenThrow(new RuntimeException("API Error"));
 	    
 	    assertThrows(RuntimeException.class, () -> {
-	        generator.generateSynopsis(history);
+	        generator.generateSynopsis(history, mockStanza);
 	    });
 	}
 
