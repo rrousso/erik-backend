@@ -12,7 +12,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.rrousso.erik_core.domain.enums.ModelType;
 import com.github.rrousso.erik_core.domain.models.ConversationHistory;
 import com.github.rrousso.erik_core.dto.initialization.InitializedStanza;
@@ -20,6 +19,7 @@ import com.github.rrousso.erik_core.persistence.entities.Stanza;
 import com.github.rrousso.erik_core.services.config.ConfigService;
 import com.github.rrousso.erik_core.services.llm.LLMClientService;
 import com.github.rrousso.erik_core.services.prompt.PromptLoaderService;
+import com.github.rrousso.erik_core.util.JsonCleanupUtil;
 
 /**
  * Service for initializing a stanza from the planning conversation.
@@ -27,13 +27,15 @@ import com.github.rrousso.erik_core.services.prompt.PromptLoaderService;
  * This is a ONE-TIME call per stanza that:
  * 1. Takes the planning conversation with Erik
  * 2. Calls the analytical LLM with the initialization prompt
- * 3. Parses the JSON response into InitializedStanza
+ * 3. Parses the JSON response into InitializedStanza (using JsonCleanupUtil)
  * 4. Returns the fully populated stanza state
  * 
  * The InitializedStanza replaces StanzaMetadata and provides:
  * - Tiered character lists with knowledge boundaries
  * - Narrative tensions with pressure tracking
  * - World context and rules
+ * 
+ * REFACTORED: Now uses JsonCleanupUtil for JSON parsing (no duplicate cleanup logic)
  */
 @Service
 public class StanzaInitializationService {
@@ -45,7 +47,6 @@ public class StanzaInitializationService {
     private final LLMClientService llmClient;
     private final PromptLoaderService promptLoader;
     private final ConfigService configService;
-    private final ObjectMapper objectMapper;
     
     public StanzaInitializationService(
             LLMClientService llmClient,
@@ -54,7 +55,6 @@ public class StanzaInitializationService {
         this.llmClient = llmClient;
         this.promptLoader = promptLoader;
         this.configService = configService;
-        this.objectMapper = new ObjectMapper();
         
         log.info("StanzaInitializationService initialized");
     }
@@ -92,14 +92,12 @@ public class StanzaInitializationService {
         
         log.info("[Initialization] Received response ({} chars)", response.length());
         
-        // Clean up the response (remove markdown fences if present)
-        String cleanJson = cleanJsonResponse(response);
+        // Parse the JSON using JsonCleanupUtil (handles cleanup + parsing in one step)
+        InitializedStanza stanza = JsonCleanupUtil.parseJson(response, InitializedStanza.class);
         
-        // Save to debug file
-        saveToDebugFile(cleanJson);
-        
-        // Parse the JSON
-        InitializedStanza stanza = parseResponse(cleanJson);
+        // Save to debug file (use cleaned JSON)
+        String cleanedJson = JsonCleanupUtil.cleanJsonResponse(response);
+        saveToDebugFile(cleanedJson);
         
         log.info("[Initialization] Successfully parsed initialization:");
         log.info("  - World: {}", stanza.getWorldIdentifier());
@@ -110,50 +108,31 @@ public class StanzaInitializationService {
         
         // Check for clarifications
         if (stanza.needsClarification()) {
-            log.warn("[Initialization] Clarifications needed: {}", stanza.getClarificationsNeeded());
+            log.warn("[Initialization] Clarifications needed:");
+            for (String clarification : stanza.getClarificationsNeeded()) {
+                log.warn("  - {}", clarification);
+            }
         }
         
         return stanza;
     }
     
+    // ========== PRIVATE HELPER METHODS ==========
+    
     /**
-     * Build the planning context from conversation history
+     * Build the planning context section from conversation history
      */
     private String buildPlanningContext(ConversationHistory history, Stanza loadedStanza) {
         StringBuilder sb = new StringBuilder();
         
-        // If there's a loaded stanza, include it FIRST
+        // If user loaded a stanza via /load command, include it for reference
         if (loadedStanza != null) {
-            sb.append("=== LOADED STANZA FOR REFERENCE/CONTINUATION ===\n\n");
-            sb.append("The user has loaded this stanza from the database:\n\n");
-            sb.append("ID: ").append(loadedStanza.getId()).append("\n");
+            sb.append("=== LOADED STANZA (for reference/continuation) ===\n\n");
+            sb.append("World: ").append(loadedStanza.getWorldIdentifier()).append("\n");
             sb.append("Setting: ").append(loadedStanza.getSetting()).append("\n");
             sb.append("Premise: ").append(loadedStanza.getPremise()).append("\n");
-            sb.append("World: ").append(loadedStanza.getWorldIdentifier()).append("\n\n");
-            
-            // Include characters from the loaded stanza
-            if (!loadedStanza.getCharacters().isEmpty()) {
-                sb.append("Characters in loaded stanza:\n");
-                for (var character : loadedStanza.getCharacters()) {
-                    if (!character.isUser()) {
-                        sb.append("- ").append(character.getName());
-                        if (character.getPublicRole() != null && !character.getPublicRole().isEmpty()) {
-                            sb.append(" (").append(character.getPublicRole()).append(")");
-                        }
-                        sb.append("\n");
-                    }
-                }
-                sb.append("\n");
-            }
-            
-            // Include synopsis if available
-            if (loadedStanza.getQuickSynopsis() != null && !loadedStanza.getQuickSynopsis().isEmpty()) {
-                sb.append("What happened in the loaded stanza:\n");
-                sb.append(loadedStanza.getQuickSynopsis()).append("\n\n");
-            }
-            
-            sb.append("IMPORTANT: If the user wants to continue or build on this stanza, ");
-            sb.append("use the SAME characters, SAME setting, SAME world. ");
+            sb.append("Tone: ").append(loadedStanza.getTone()).append("\n\n");
+            sb.append("User may want to continue this story OR use it as inspiration.\n");
             sb.append("Do NOT create a completely new scenario unless explicitly asked.\n\n");
             sb.append("=== END LOADED STANZA ===\n\n");
         }
@@ -187,39 +166,6 @@ public class StanzaInitializationService {
         sb.append("Now output the initialization JSON:");
         
         return sb.toString();
-    }
-    
-    /**
-     * Clean up JSON response (remove markdown fences, trim)
-     */
-    private String cleanJsonResponse(String response) {
-        String cleaned = response.trim();
-        
-        // Remove ```json and ``` if present
-        if (cleaned.startsWith("```json")) {
-            cleaned = cleaned.substring(7);
-        } else if (cleaned.startsWith("```")) {
-            cleaned = cleaned.substring(3);
-        }
-        
-        if (cleaned.endsWith("```")) {
-            cleaned = cleaned.substring(0, cleaned.length() - 3);
-        }
-        
-        return cleaned.trim();
-    }
-    
-    /**
-     * Parse the JSON response into InitializedStanza
-     */
-    private InitializedStanza parseResponse(String json) throws Exception {
-        try {
-            return objectMapper.readValue(json, InitializedStanza.class);
-        } catch (Exception e) {
-            log.error("[Initialization] Failed to parse JSON response: {}", e.getMessage());
-            log.debug("[Initialization] Raw JSON:\n{}", json);
-            throw new RuntimeException("Failed to parse initialization response: " + e.getMessage(), e);
-        }
     }
     
     /**

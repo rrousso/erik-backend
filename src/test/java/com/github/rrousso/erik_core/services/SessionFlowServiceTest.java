@@ -1,14 +1,8 @@
 package com.github.rrousso.erik_core.services;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -18,373 +12,320 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.github.rrousso.erik_core.domain.enums.Flag;
-import com.github.rrousso.erik_core.domain.enums.ModelType;
-import com.github.rrousso.erik_core.domain.enums.StanzaStatus;
-import com.github.rrousso.erik_core.domain.models.SessionContext;
 import com.github.rrousso.erik_core.domain.models.SessionState;
-import com.github.rrousso.erik_core.dto.initialization.InitializedStanza;
-import com.github.rrousso.erik_core.persistence.repositories.PersonaRepository;
 import com.github.rrousso.erik_core.services.llm.FlagDetectorService;
-import com.github.rrousso.erik_core.services.llm.LLMClientService;
 import com.github.rrousso.erik_core.services.orchestration.SessionFlowService;
-import com.github.rrousso.erik_core.services.prompt.SystemPromptBuilderService;
-import com.github.rrousso.erik_core.services.session.SessionAssemblerService;
-import com.github.rrousso.erik_core.services.session.SynopsisGeneratorService;
-import com.github.rrousso.erik_core.services.stanza.StanzaExtractionService;
-import com.github.rrousso.erik_core.services.stanza.StanzaInitializationService;
-import com.github.rrousso.erik_core.services.stanza.StanzaPersistenceService;
+import com.github.rrousso.erik_core.services.orchestration.strategies.FlowStrategy;
+import com.github.rrousso.erik_core.services.orchestration.strategies.FlowStrategyFactory;
 
-
+/**
+ * Unit tests for SessionFlowService (after Strategy Pattern refactoring).
+ * 
+ * The refactored SessionFlowService is simple - it:
+ * 1. Validates input
+ * 2. Detects flags
+ * 3. Routes to appropriate strategy
+ * 4. Returns result
+ * 
+ * All business logic is now in strategies, so we only test routing logic here.
+ */
 @ExtendWith(MockitoExtension.class)
-@DisplayName("Session Flow Service Test")
+@DisplayName("SessionFlowService Tests - Strategy Pattern")
 public class SessionFlowServiceTest {
-	
-	@Mock
-    private LLMClientService llmClient;
-	
-	@Mock
-    private SystemPromptBuilderService promptBuilder;
     
-	@Mock
-	private SynopsisGeneratorService synopsisGenerator;
+    @Mock
+    private FlowStrategyFactory strategyFactory;
     
-	@Mock
-	private FlagDetectorService flagDetector;
-	
-	@Mock
-    private PersonaRepository personaRepository;
-	
-	private SessionFlowService sessionFlowService;
-	
-	@Mock
-	private SessionAssemblerService sessionAssembler;
-	
-	@Mock
-	private StanzaInitializationService initializationService;
-	
-	@Mock
-	private StanzaPersistenceService persistenceService;
-	
-	@Mock
-	private StanzaExtractionService extractionService;
-	
-	private SessionState state;
-	
-	@BeforeEach
-	void setUp() {
-		// Updated constructor - removed stanzaExtractor, added persistenceService
-		sessionFlowService = new SessionFlowService(
-			llmClient, 
-			promptBuilder, 
-			synopsisGenerator, 
-			flagDetector, 
-			sessionAssembler, 
-			personaRepository, 
-			initializationService,
-			persistenceService,
-			extractionService
-		);
-		state = new SessionState();
-	}
-	
-	@Test
-	@DisplayName("Should stay in void mode on regular input")
-	void shouldStayInVoidModeOnRegularInput() throws Exception{
-		
-    	when(flagDetector.detect(
-    			eq("Hello!"),
-    			eq(state)
-    			)).thenReturn(Flag.NONE);
-    	
-        SessionContext context = SessionContext.builder()
-                .mode(SessionState.Mode.VOID)
-                .stanzaStatus(StanzaStatus.NONE)
-                .build();
-            
-        when(sessionAssembler.assembleForVoid(eq(state)))
-                .thenReturn(context);
-    	
-    	when(promptBuilder.buildVoidPromptFromContext(eq(context)))
-    	.thenReturn("Void Prompt");
-    	
-        when(llmClient.call(
-                eq(ModelType.NARRATIVE),
-                eq("Void Prompt"),
-                eq("Hello!"))).thenReturn("Hi! How are you?");
-        
-        String message = sessionFlowService.handleUserInput("Hello!", state);
+    @Mock
+    private FlagDetectorService flagDetector;
     
-        assertEquals("\n[Erik] Hi! How are you?", message);
-        assertTrue(state.isInVoidMode());
-	}
-	
-	@Test
-	@DisplayName("Should start stanza in void mode on Start input")
-	void shouldStartStanzaInVoidModeOnStartInput() throws Exception{
-		InitializedStanza init = new InitializedStanza();
+    @Mock
+    private FlowStrategy mockStrategy;
+    
+    private SessionFlowService sessionFlowService;
+    private SessionState state;
+    
+    @BeforeEach
+    void setUp() {
+        sessionFlowService = new SessionFlowService(strategyFactory, flagDetector);
+        state = new SessionState();
+    }
+    
+    // ========================================
+    // INPUT VALIDATION TESTS
+    // ========================================
+    
+    @Test
+    @DisplayName("Should throw NullPointerException when userInput is null")
+    void shouldThrowExceptionWhenUserInputIsNull() {
+        assertThrows(NullPointerException.class, () -> {
+            sessionFlowService.handleUserInput(null, state);
+        });
+    }
+    
+    @Test
+    @DisplayName("Should throw NullPointerException when state is null")
+    void shouldThrowExceptionWhenStateIsNull() {
+        assertThrows(NullPointerException.class, () -> {
+            sessionFlowService.handleUserInput("Hello", null);
+        });
+    }
+    
+    @Test
+    @DisplayName("Should return empty string when userInput is blank")
+    void shouldReturnEmptyStringWhenInputIsBlank() {
+        String result = sessionFlowService.handleUserInput("   ", state);
+        assertEquals("", result);
         
-    	when(flagDetector.detect(
-    			eq("Let's begin!"),
-    			eq(state)
-    			)).thenReturn(Flag.START_STANZA);
-    	
-        SessionContext context = SessionContext.builder()
-                .mode(SessionState.Mode.VOID)
-                .stanzaStatus(StanzaStatus.NONE)
-                .build();
+        // Should not call detector or factory for blank input
+        verifyNoInteractions(flagDetector);
+        verifyNoInteractions(strategyFactory);
+    }
+    
+    @Test
+    @DisplayName("Should return empty string when userInput is empty")
+    void shouldReturnEmptyStringWhenInputIsEmpty() {
+        String result = sessionFlowService.handleUserInput("", state);
+        assertEquals("", result);
         
-        when(sessionAssembler.assembleForVoid(eq(state)))
-        .thenReturn(context);
+        verifyNoInteractions(flagDetector);
+        verifyNoInteractions(strategyFactory);
+    }
+    
+    // ========================================
+    // FLAG-BASED ROUTING TESTS
+    // ========================================
+    
+    @Test
+    @DisplayName("Should route to START strategy when START flag detected")
+    void shouldRouteToStartStrategyWhenStartFlagDetected() {
+        String userInput = "Yes, let's begin!";
         
-        when(sessionAssembler.assembleForStanza(eq(state)))
-        .thenReturn(context);
-    	
-    	when(promptBuilder.buildVoidPromptFromContext(eq(context)))
-    	.thenReturn("Void Prompt");
-    	
-    	when(initializationService.initializeFromPlanning(any(),any())).thenReturn(init);
-
-    	when(promptBuilder.buildStanzaPromptFromContext(eq(context)))
-    	.thenReturn("Stanza Prompt");
-    	
-    	when(llmClient.call(
-                eq(ModelType.NARRATIVE),
-                eq("Void Prompt"),
-                eq("Let's begin!"))).thenReturn("Very well, let's do this!");
-    	
-        when(llmClient.call(
-                eq(ModelType.NARRATIVE),
-                eq("Stanza Prompt"),
-                anyString())).thenReturn("You enter the dance floor in your purple dress.");
+        when(flagDetector.detect(userInput, state)).thenReturn(Flag.START_STANZA);
+        when(strategyFactory.getStrategyForFlag(Flag.START_STANZA)).thenReturn(mockStrategy);
+        when(mockStrategy.execute(userInput, state)).thenReturn("[System] Starting stanza...");
         
-        String message = sessionFlowService.handleUserInput("Let's begin!", state);
+        String result = sessionFlowService.handleUserInput(userInput, state);
         
-        System.out.println(message);
+        assertEquals("[System] Starting stanza...", result);
         
-        assertTrue(message.contains("[Erik] Very well, let's do this!"));
-        assertTrue(message.contains("[STANZA START]"));
-        assertTrue(message.contains("[Opening Narration] You enter the dance floor in your purple dress."));
-        assertEquals(StanzaStatus.ACTIVE, state.getStanzaStatus());
-        assertTrue(state.isInStanzaMode());
-	}
-	
-	@Test
-	@DisplayName("Should pause stanza in stanza mode on Pause input")
-	void shouldPauseStanzaInStanzaModeOnPauseInput() throws Exception{
-		state.enterStanzaMode();
-		state.setStanzaStatus(StanzaStatus.ACTIVE);
-		
-        SessionContext context = SessionContext.builder()
-                .mode(SessionState.Mode.STANZA)
-                .stanzaStatus(StanzaStatus.ACTIVE)
-                .build();
+        verify(flagDetector).detect(userInput, state);
+        verify(strategyFactory).getStrategyForFlag(Flag.START_STANZA);
+        verify(mockStrategy).execute(userInput, state);
+        verify(strategyFactory, never()).getStrategyForConversation(any());
+    }
+    
+    @Test
+    @DisplayName("Should route to PAUSE strategy when PAUSE flag detected")
+    void shouldRouteToPauseStrategyWhenPauseFlagDetected() {
+        String userInput = "((pause))";
         
-        when(sessionAssembler.assembleForVoid(eq(state)))
-        .thenReturn(context);
-		
-    	when(flagDetector.detect(
-    			eq("((Pause, let's do this differently))"),
-    			eq(state)
-    			)).thenReturn(Flag.PAUSE_STANZA);
-    	
-    	when(promptBuilder.buildVoidPromptFromContext(eq(context)))
-    			.thenReturn("Void Prompt");
-    	
-    	when(llmClient.call(
-                eq(ModelType.NARRATIVE),
-                eq("Void Prompt"),
-                eq("((Pause, let's do this differently))"))).thenReturn("Sounds, good! should we continue?");
-   
+        when(flagDetector.detect(userInput, state)).thenReturn(Flag.PAUSE_STANZA);
+        when(strategyFactory.getStrategyForFlag(Flag.PAUSE_STANZA)).thenReturn(mockStrategy);
+        when(mockStrategy.execute(userInput, state)).thenReturn("[Erik] Sure, let's take a break.");
         
-        String message = sessionFlowService.handleUserInput("((Pause, let's do this differently))", state);
+        String result = sessionFlowService.handleUserInput(userInput, state);
         
-        assertTrue(message.contains("[Erik] Sounds, good! should we continue?"));
-        assertEquals(StanzaStatus.PAUSED, state.getStanzaStatus());
-        assertTrue(state.isInVoidMode());
-	}
-	
-	@Test
-	@DisplayName("Should continue stanza in void mode on Continue input")
-	void shouldContinueStanzaInVoidModeOnContinueInput() throws Exception{
-		
-		// Use InitializedStanza instead of old StanzaMetadata
-		InitializedStanza initialized = new InitializedStanza();
-		initialized.setWorldIdentifier("cinderella_story");
-		
-		state.setStanzaStatus(StanzaStatus.PAUSED);
-		state.setInitializedStanza(initialized);  // Changed from setCurrentStanza
-		
-        SessionContext context = SessionContext.builder()
-                .mode(SessionState.Mode.VOID)
-                .stanzaStatus(StanzaStatus.PAUSED)
-                .build();
+        assertEquals("[Erik] Sure, let's take a break.", result);
         
-        when(sessionAssembler.assembleForStanza(eq(state)))
-        .thenReturn(context);
-			 
-    	when(flagDetector.detect(
-    			eq("Yeah, let's go back now"),
-    			eq(state)
-    			)).thenReturn(Flag.CONTINUE_STANZA);
-    	
-    	when(promptBuilder.buildStanzaPromptFromContext(eq(context)))
-    	.thenReturn("Stanza Prompt");
-    	
-    	// Mock synopsisGenerator.generatePauseChanges since continueStanza calls it
-    	when(synopsisGenerator.generatePauseChanges(any()))
-    	.thenReturn("User wants to change direction");
-
-        when(llmClient.call(
-                eq(ModelType.NARRATIVE),
-                eq("Stanza Prompt"),
-                anyString())).thenReturn("Things continue a bit different now.");
+        verify(flagDetector).detect(userInput, state);
+        verify(strategyFactory).getStrategyForFlag(Flag.PAUSE_STANZA);
+        verify(mockStrategy).execute(userInput, state);
+    }
+    
+    @Test
+    @DisplayName("Should route to CONTINUE strategy when CONTINUE flag detected")
+    void shouldRouteToContinueStrategyWhenContinueFlagDetected() {
+        String userInput = "Let's continue";
         
-        String message = sessionFlowService.handleUserInput("Yeah, let's go back now", state);
+        when(flagDetector.detect(userInput, state)).thenReturn(Flag.CONTINUE_STANZA);
+        when(strategyFactory.getStrategyForFlag(Flag.CONTINUE_STANZA)).thenReturn(mockStrategy);
+        when(mockStrategy.execute(userInput, state)).thenReturn("[Narrator] The story continues...");
         
-        assertTrue(message.contains("[Narration] Things continue a bit different now."));
-        assertEquals(StanzaStatus.ACTIVE, state.getStanzaStatus());
-        assertTrue(state.isInStanzaMode());
-	}
-	
-	@Test
-	@DisplayName("Should end stanza in Stanza mode on End input")
-	void shouldEndStanzaInStanzaModeOnEndInput() throws Exception{
-		// Use InitializedStanza instead of old StanzaMetadata
-		InitializedStanza initialized = new InitializedStanza();
-		initialized.setWorldIdentifier("cinderella_story");
+        String result = sessionFlowService.handleUserInput(userInput, state);
         
-		state.enterStanzaMode();
-		state.setStanzaStatus(StanzaStatus.ACTIVE);
-		state.setInitializedStanza(initialized);  // Changed from setCurrentStanza
-		
-        SessionContext context = SessionContext.builder()
-                .mode(SessionState.Mode.STANZA)
-                .stanzaStatus(StanzaStatus.ACTIVE)
-                .build();
+        assertEquals("[Narrator] The story continues...", result);
         
-        when(sessionAssembler.assembleForStanza(eq(state)))
-        .thenReturn(context);
+        verify(flagDetector).detect(userInput, state);
+        verify(strategyFactory).getStrategyForFlag(Flag.CONTINUE_STANZA);
+        verify(mockStrategy).execute(userInput, state);
+    }
+    
+    @Test
+    @DisplayName("Should route to END strategy when END flag detected")
+    void shouldRouteToEndStrategyWhenEndFlagDetected() {
+        String userInput = "((end stanza))";
         
-        when(sessionAssembler.assembleForVoid(eq(state)))
-        .thenReturn(context);
-		
-    	when(flagDetector.detect(
-    			eq("((end stanza))"),
-    			eq(state)
-    			)).thenReturn(Flag.END_STANZA);
-    	
-    	when(promptBuilder.buildVoidPromptFromContext(eq(context)))
-    	.thenReturn("Void Prompt");
-    	
-    	when(promptBuilder.buildStanzaPromptFromContext(eq(context)))
-    	.thenReturn("Stanza Prompt");
-    	
-    	when(llmClient.call(
-                eq(ModelType.NARRATIVE),
-                eq("Stanza Prompt"),
-                anyString())).thenReturn("You and the prince kiss and leave into the sunset.");
-    	
-    	when(llmClient.call(
-                eq(ModelType.NARRATIVE),
-                eq("Void Prompt"),
-                anyString())).thenReturn("That was a nice ending, what do you feel about it?");
+        when(flagDetector.detect(userInput, state)).thenReturn(Flag.END_STANZA);
+        when(strategyFactory.getStrategyForFlag(Flag.END_STANZA)).thenReturn(mockStrategy);
+        when(mockStrategy.execute(userInput, state)).thenReturn("[Narrator] And so the story ends...");
         
-        String message = sessionFlowService.handleUserInput("((end stanza))", state);
-                
-        assertTrue(message.contains("[Narration - Closing] You and the prince kiss and leave into the sunset."));
-        assertTrue(message.contains("[STANZA END]"));
-        assertTrue(message.contains("[System] Here's the quick synopsis:"));
-        assertTrue(message.contains("[Erik] That was a nice ending, what do you feel about it?"));
-        assertEquals(StanzaStatus.COMPLETED, state.getStanzaStatus());
-        assertTrue(state.isInVoidMode());
-	}
-	
-	@Test
-	@DisplayName("Should abandon stanza in Stanza mode on Abandon input")
-	void shouldAbandonStanzaInStanzaModeOnAbandonInput() throws Exception{
-		// Use InitializedStanza instead of old StanzaMetadata
-		InitializedStanza initialized = new InitializedStanza();
-		initialized.setWorldIdentifier("cinderella_story");
+        String result = sessionFlowService.handleUserInput(userInput, state);
         
-		state.enterStanzaMode();
-		state.setStanzaStatus(StanzaStatus.ACTIVE);
-		state.setInitializedStanza(initialized);  // Changed from setCurrentStanza
-		
-        SessionContext context = SessionContext.builder()
-                .mode(SessionState.Mode.STANZA)
-                .stanzaStatus(StanzaStatus.ACTIVE)
-                .build();
-       
-        when(sessionAssembler.assembleForVoid(eq(state)))
-        .thenReturn(context);
-		
-    	when(flagDetector.detect(
-    			eq("((abandon stanza))"),
-    			eq(state)
-    			)).thenReturn(Flag.ABANDON_STANZA);
-    	
-    	when(promptBuilder.buildVoidPromptFromContext(eq(context)))
-    	.thenReturn("Void Prompt");;
-    	
-    	when(llmClient.call(
-                eq(ModelType.NARRATIVE),
-                eq("Void Prompt"),
-                anyString())).thenReturn("Do you want to start a new one?");
-    	
-        String message = sessionFlowService.handleUserInput("((abandon stanza))", state);
-                
-        assertTrue(message.contains("[Erik] Do you want to start a new one?"));
-        assertEquals(StanzaStatus.ABANDONED, state.getStanzaStatus());
-        assertTrue(state.isInVoidMode());
-        assertNull(state.getInitializedStanza());  // Changed from getCurrentStanza
-        assertNotNull(state.getCompletedStanza());
-	}
-	
-	@Test
-	@DisplayName("Should not start stanza in Void mode on Start input after and Completed status")
-	void shouldNotStartStanzaInVoidModeOnStartInputAndCompletedStatus() throws Exception{
-		state.setStanzaStatus(StanzaStatus.COMPLETED);
-		
-    	when(flagDetector.detect(
-    			eq("Let's start a new stanza!"),
-    			eq(state)
-    			)).thenReturn(Flag.START_STANZA);
-    	
-        String message = sessionFlowService.handleUserInput("Let's start a new stanza!", state);
-                
-        assertTrue(message.contains("[System] You've already completed a stanza this session."));
-        assertEquals(StanzaStatus.COMPLETED, state.getStanzaStatus());
-        assertTrue(state.isInVoidMode());
-	}
-	
-	@Test
-	@DisplayName("Should handle LLM exceptions gracefully during input processing")
-	void shouldHandleLlmExceptionsGracefullyDuringInputProcessing() throws Exception{
-    	when(flagDetector.detect(
-    			eq("Hello!"),
-    			eq(state)
-    			)).thenReturn(Flag.NONE);
-    	
-        SessionContext context = SessionContext.builder()
-                .mode(SessionState.Mode.STANZA)
-                .stanzaStatus(StanzaStatus.ACTIVE)
-                .build();
-       
-        when(sessionAssembler.assembleForVoid(eq(state)))
-        .thenReturn(context);
-    	
-    	when(promptBuilder.buildVoidPromptFromContext(eq(context)))
-    	.thenReturn("Void Prompt");
-    	
-        doThrow(new RuntimeException("API Error"))
-        .when(llmClient)
-        .call(eq(ModelType.NARRATIVE), eq("Void Prompt"), eq("Hello!"));
+        assertEquals("[Narrator] And so the story ends...", result);
         
-        String message = sessionFlowService.handleUserInput("Hello!", state);
+        verify(flagDetector).detect(userInput, state);
+        verify(strategyFactory).getStrategyForFlag(Flag.END_STANZA);
+        verify(mockStrategy).execute(userInput, state);
+    }
+    
+    @Test
+    @DisplayName("Should route to ABANDON strategy when ABANDON flag detected")
+    void shouldRouteToAbandonStrategyWhenAbandonFlagDetected() {
+        String userInput = "((abandon))";
         
-        assertTrue(message.contains("error"));
-        assertTrue(state.isInVoidMode());
-
-	}
-
+        when(flagDetector.detect(userInput, state)).thenReturn(Flag.ABANDON_STANZA);
+        when(strategyFactory.getStrategyForFlag(Flag.ABANDON_STANZA)).thenReturn(mockStrategy);
+        when(mockStrategy.execute(userInput, state)).thenReturn("[System] Stanza abandoned.");
+        
+        String result = sessionFlowService.handleUserInput(userInput, state);
+        
+        assertEquals("[System] Stanza abandoned.", result);
+        
+        verify(flagDetector).detect(userInput, state);
+        verify(strategyFactory).getStrategyForFlag(Flag.ABANDON_STANZA);
+        verify(mockStrategy).execute(userInput, state);
+    }
+    
+    // ========================================
+    // MODE-BASED ROUTING TESTS (No Flag)
+    // ========================================
+    
+    @Test
+    @DisplayName("Should route to conversation strategy when no flag detected")
+    void shouldRouteToConversationStrategyWhenNoFlagDetected() {
+        String userInput = "Hello Erik!";
+        
+        when(flagDetector.detect(userInput, state)).thenReturn(Flag.NONE);
+        when(strategyFactory.getStrategyForConversation(state)).thenReturn(mockStrategy);
+        when(mockStrategy.execute(userInput, state)).thenReturn("[Erik] Hi! How can I help?");
+        
+        String result = sessionFlowService.handleUserInput(userInput, state);
+        
+        assertEquals("[Erik] Hi! How can I help?", result);
+        
+        verify(flagDetector).detect(userInput, state);
+        verify(strategyFactory).getStrategyForConversation(state);
+        verify(mockStrategy).execute(userInput, state);
+        verify(strategyFactory, never()).getStrategyForFlag(any());
+    }
+    
+    @Test
+    @DisplayName("Should route to conversation strategy for normal user message")
+    void shouldRouteToConversationStrategyForNormalMessage() {
+        String userInput = "I want to create a story about vampires";
+        
+        when(flagDetector.detect(userInput, state)).thenReturn(Flag.NONE);
+        when(strategyFactory.getStrategyForConversation(state)).thenReturn(mockStrategy);
+        when(mockStrategy.execute(userInput, state))
+            .thenReturn("[Erik] Vampires! Great choice. Tell me more...");
+        
+        String result = sessionFlowService.handleUserInput(userInput, state);
+        
+        assertEquals("[Erik] Vampires! Great choice. Tell me more...", result);
+        
+        verify(flagDetector).detect(userInput, state);
+        verify(strategyFactory).getStrategyForConversation(state);
+        verify(mockStrategy).execute(userInput, state);
+    }
+    
+    // ========================================
+    // ERROR HANDLING TESTS
+    // ========================================
+    
+    @Test
+    @DisplayName("Should propagate exception from flag detector")
+    void shouldPropagateExceptionFromFlagDetector() {
+        String userInput = "Test input";
+        
+        when(flagDetector.detect(userInput, state))
+            .thenThrow(new RuntimeException("Flag detection failed"));
+        
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+            sessionFlowService.handleUserInput(userInput, state);
+        });
+        
+        assertEquals("Flag detection failed", exception.getMessage());
+        
+        verify(flagDetector).detect(userInput, state);
+        verifyNoInteractions(strategyFactory);
+    }
+    
+    @Test
+    @DisplayName("Should propagate exception from strategy execution")
+    void shouldPropagateExceptionFromStrategyExecution() {
+        String userInput = "Hello";
+        
+        when(flagDetector.detect(userInput, state)).thenReturn(Flag.NONE);
+        when(strategyFactory.getStrategyForConversation(state)).thenReturn(mockStrategy);
+        when(mockStrategy.execute(userInput, state))
+            .thenThrow(new RuntimeException("Strategy execution failed"));
+        
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+            sessionFlowService.handleUserInput(userInput, state);
+        });
+        
+        assertEquals("Strategy execution failed", exception.getMessage());
+        
+        verify(flagDetector).detect(userInput, state);
+        verify(strategyFactory).getStrategyForConversation(state);
+        verify(mockStrategy).execute(userInput, state);
+    }
+    
+    @Test
+    @DisplayName("Should propagate exception from strategy factory")
+    void shouldPropagateExceptionFromStrategyFactory() {
+        String userInput = "start";
+        
+        when(flagDetector.detect(userInput, state)).thenReturn(Flag.START_STANZA);
+        when(strategyFactory.getStrategyForFlag(Flag.START_STANZA))
+            .thenThrow(new IllegalStateException("No strategy registered for flag"));
+        
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> {
+            sessionFlowService.handleUserInput(userInput, state);
+        });
+        
+        assertEquals("No strategy registered for flag", exception.getMessage());
+        
+        verify(flagDetector).detect(userInput, state);
+        verify(strategyFactory).getStrategyForFlag(Flag.START_STANZA);
+    }
+    
+    // ========================================
+    // INTEGRATION TESTS (Multiple Calls)
+    // ========================================
+    
+    @Test
+    @DisplayName("Should handle multiple consecutive calls correctly")
+    void shouldHandleMultipleConsecutiveCallsCorrectly() {
+        // First call - no flag
+        when(flagDetector.detect("Hello", state)).thenReturn(Flag.NONE);
+        when(strategyFactory.getStrategyForConversation(state)).thenReturn(mockStrategy);
+        when(mockStrategy.execute("Hello", state)).thenReturn("[Erik] Hi!");
+        
+        String result1 = sessionFlowService.handleUserInput("Hello", state);
+        assertEquals("[Erik] Hi!", result1);
+        
+        // Second call - flag detected
+        when(flagDetector.detect("start", state)).thenReturn(Flag.START_STANZA);
+        when(strategyFactory.getStrategyForFlag(Flag.START_STANZA)).thenReturn(mockStrategy);
+        when(mockStrategy.execute("start", state)).thenReturn("[System] Starting...");
+        
+        String result2 = sessionFlowService.handleUserInput("start", state);
+        assertEquals("[System] Starting...", result2);
+        
+        // Third call - different flag
+        when(flagDetector.detect("pause", state)).thenReturn(Flag.PAUSE_STANZA);
+        when(strategyFactory.getStrategyForFlag(Flag.PAUSE_STANZA)).thenReturn(mockStrategy);
+        when(mockStrategy.execute("pause", state)).thenReturn("[Erik] Pausing...");
+        
+        String result3 = sessionFlowService.handleUserInput("pause", state);
+        assertEquals("[Erik] Pausing...", result3);
+        
+        // Verify all calls happened
+        verify(flagDetector, times(3)).detect(anyString(), eq(state));
+        verify(strategyFactory, times(1)).getStrategyForConversation(state);
+        verify(strategyFactory, times(1)).getStrategyForFlag(Flag.START_STANZA);
+        verify(strategyFactory, times(1)).getStrategyForFlag(Flag.PAUSE_STANZA);
+    }
 }

@@ -5,13 +5,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.rrousso.erik_core.domain.enums.ModelType;
 import com.github.rrousso.erik_core.dto.extraction.ExtractionResult;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
 import com.github.rrousso.erik_core.services.llm.LLMClientService;
 import com.github.rrousso.erik_core.services.prompt.ExtractionPromptBuilder;
 import com.github.rrousso.erik_core.services.stanza.appliers.ExtractionApplierRegistry;
+import com.github.rrousso.erik_core.util.JsonCleanupUtil;
 
 import jakarta.transaction.Transactional;
 
@@ -21,13 +21,14 @@ import jakarta.transaction.Transactional;
  * 
  * BEFORE refactoring: ~600 lines with 5 large apply methods
  * AFTER refactoring: ~100 lines with clean delegation to appliers
+ * AFTER JSON util extraction: Even cleaner with no duplicate parsing logic
  * 
  * This is the main orchestrator for Phase 2 (Mid-Stanza Updates).
  * 
  * Process:
  * 1. Build extraction prompt with current state
  * 2. Call Gemini (analytical model) to analyze the exchange
- * 3. Parse JSON response into ExtractionResult
+ * 3. Parse JSON response into ExtractionResult (using JsonCleanupUtil)
  * 4. Delegate to ExtractionApplierRegistry to apply all changes
  * 
  * The actual application logic is now in the appliers package:
@@ -47,7 +48,6 @@ public class StanzaExtractionService {
     private final ExtractionPromptBuilder promptBuilder;
     private final LLMClientService llmClient;
     private final ExtractionApplierRegistry applierRegistry;
-    private final ObjectMapper objectMapper;
     
     public StanzaExtractionService(
             ExtractionPromptBuilder promptBuilder,
@@ -56,7 +56,6 @@ public class StanzaExtractionService {
         this.promptBuilder = promptBuilder;
         this.llmClient = llmClient;
         this.applierRegistry = applierRegistry;
-        this.objectMapper = new ObjectMapper();
     }
     
     /**
@@ -78,8 +77,8 @@ public class StanzaExtractionService {
             log.debug("[Extraction] Calling analytical model");
             String jsonResponse = llmClient.call(ModelType.ANALYTICAL, prompt, "Extract state changes");
             
-            // 3. Parse the JSON response
-            ExtractionResult result = parseExtractionResult(jsonResponse);
+            // 3. Parse the JSON response using JsonCleanupUtil
+            ExtractionResult result = JsonCleanupUtil.parseJson(jsonResponse, ExtractionResult.class);
             
             // 4. Log what we extracted
             if (result.hasAnyChanges()) {
@@ -104,27 +103,5 @@ public class StanzaExtractionService {
             log.error("[Extraction] Failed to extract/apply changes for stanza " + stanza.getId(), e);
             // Don't rethrow - extraction failure shouldn't break the narrative flow
         }
-    }
-    
-    /**
-     * Parse the JSON response from Gemini into ExtractionResult.
-     * Handles cleanup of markdown code fences if present.
-     */
-    private ExtractionResult parseExtractionResult(String jsonResponse) throws Exception {
-        // Clean up potential markdown code fences
-        String cleaned = jsonResponse.trim();
-        if (cleaned.startsWith("```json")) {
-            cleaned = cleaned.substring(7);
-        }
-        if (cleaned.startsWith("```")) {
-            cleaned = cleaned.substring(3);
-        }
-        if (cleaned.endsWith("```")) {
-            cleaned = cleaned.substring(0, cleaned.length() - 3);
-        }
-        cleaned = cleaned.trim();
-        
-        // Parse JSON
-        return objectMapper.readValue(cleaned, ExtractionResult.class);
     }
 }
