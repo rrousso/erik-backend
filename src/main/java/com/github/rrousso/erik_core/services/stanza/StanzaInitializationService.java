@@ -127,14 +127,24 @@ public class StanzaInitializationService {
         
         // If user loaded a stanza via /load command, include it for reference
         if (loadedStanza != null) {
-            sb.append("=== LOADED STANZA (for reference/continuation) ===\n\n");
-            sb.append("World: ").append(loadedStanza.getWorldIdentifier()).append("\n");
-            sb.append("Setting: ").append(loadedStanza.getSetting()).append("\n");
-            sb.append("Premise: ").append(loadedStanza.getPremise()).append("\n");
-            sb.append("Tone: ").append(loadedStanza.getTone()).append("\n\n");
-            sb.append("User may want to continue this story OR use it as inspiration.\n");
-            sb.append("Do NOT create a completely new scenario unless explicitly asked.\n\n");
-            sb.append("=== END LOADED STANZA ===\n\n");
+            sb.append("=== LOADED STANZA CONTEXT (for continuation) ===\n\n");
+            sb.append("CRITICAL INSTRUCTION:\n");
+            sb.append("This is a CONTINUATION of an existing stanza.\n");
+            sb.append("The character data, tensions, and world context below should be PRESERVED.\n");
+            sb.append("Only modify what the user explicitly requests in the planning conversation.\n");
+            sb.append("Do NOT create new versions of existing characters - use their existing data.\n\n");
+            
+            // Include full narrator context (characters, tensions, events, etc.)
+            sb.append(loadedStanza.toNarratorContext());
+            
+            // If there's a synopsis with events, include it
+            String synopsis = loadedStanza.getQuickSynopsis();
+            if (synopsis != null && !synopsis.isEmpty()) {
+                sb.append("\n=== WHAT HAPPENED PREVIOUSLY ===\n\n");
+                sb.append(synopsis).append("\n\n");
+            }
+            
+            sb.append("=== END LOADED STANZA CONTEXT ===\n\n");
         }
         
         sb.append("=== PLANNING CONVERSATION ===\n\n");

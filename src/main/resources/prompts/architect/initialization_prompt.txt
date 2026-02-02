@@ -35,6 +35,25 @@ You will receive:
 
 ---
 
+## HANDLING LOADED STANZA CONTINUATIONS
+
+If you receive a "LOADED STANZA CONTEXT" section:
+- This is a CONTINUATION, not a new stanza
+- **PRESERVE all character data unless user explicitly requests changes**
+- Keep character names, roles, knowledge, motivations unchanged
+- Only modify what the user specifically asks to change in the planning conversation
+- Copy forward all tensions, secrets, and world rules that weren't explicitly changed
+
+Example:
+- Loaded: Malik (talking black cat, companion)
+- User says: "continue it" → Keep Malik as talking black cat
+- User says: "make Malik more playful" → Keep as talking black cat, adjust emotional state to playful
+- User says: "make Malik a dog instead" → Change to talking dog
+
+If user just says "continue" with no modifications, copy the loaded stanza data EXACTLY
+
+---
+
 ## OUTPUT FORMAT
 
 Respond with ONLY valid JSON. No preamble, no explanation, no markdown code fences.

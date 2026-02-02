@@ -130,7 +130,7 @@ public class FlagDetectorService {
     private String getAvailableFlags(StanzaStatus currentStatus) {
         return switch (currentStatus) {
             case NONE -> "START";
-            case ACTIVE -> "PAUSE, END, ABANDON";
+            case ACTIVE -> "PAUSE, END, ABANDON, NEXT_BEAT";
             case PAUSED -> "CONTINUE";
             case ABANDONED -> "START";
             case COMPLETED -> "NONE";
@@ -146,7 +146,10 @@ public class FlagDetectorService {
         // Now check for actual commands
         Flag flag = Flag.NONE;
         
-        if (cleanResponse.contains("START")) {
+        // Check NEXT_BEAT first (most specific)
+        if (cleanResponse.contains("NEXT_BEAT") || cleanResponse.contains("NEXT BEAT")) {
+            flag = Flag.NEXT_BEAT;
+        } else if (cleanResponse.contains("START")) {
             flag = Flag.START_STANZA;
         } else if (cleanResponse.contains("PAUSE")) {
             flag = Flag.PAUSE_STANZA;
@@ -175,7 +178,7 @@ public class FlagDetectorService {
         return switch (status) {
             case NONE -> flag == Flag.START_STANZA || flag == Flag.NONE;
             case ACTIVE -> flag == Flag.PAUSE_STANZA || flag == Flag.END_STANZA || 
-                          flag == Flag.ABANDON_STANZA || flag == Flag.NONE;
+                          flag == Flag.ABANDON_STANZA || flag == Flag.NEXT_BEAT || flag == Flag.NONE;
             case PAUSED -> flag == Flag.CONTINUE_STANZA || flag == Flag.NONE;
             case ABANDONED -> flag == Flag.START_STANZA || flag == Flag.NONE;
             case COMPLETED -> flag == Flag.NONE;

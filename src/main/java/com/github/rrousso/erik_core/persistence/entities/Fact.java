@@ -6,6 +6,8 @@ import java.time.LocalDateTime;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Represents a fact - an atomic truth about the world.
@@ -20,6 +22,8 @@ import org.hibernate.type.SqlTypes;
 @Table(name = "stanza_facts")
 public class Fact {
     
+	private static final Logger log = LoggerFactory.getLogger(Fact.class);
+	
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -143,100 +147,127 @@ public class Fact {
         return "character".equals(subjectType) && characterName.equals(subjectId);
     }
     
-    // === GETTERS AND SETTERS ===
-    
+ // === GETTERS AND SETTERS WITH VALIDATION ===
+
     public Long getId() {
         return id;
     }
-    
+
     public void setId(Long id) {
         this.id = id;
     }
-    
+
     public Stanza getStanza() {
         return stanza;
     }
-    
+
     public void setStanza(Stanza stanza) {
         this.stanza = stanza;
     }
-    
+
     public String getFactKey() {
         return factKey;
     }
-    
+
+    /**
+     * Set fact key with validation.
+     * Truncates to 50 characters if needed.
+     */
     public void setFactKey(String factKey) {
-        this.factKey = factKey;
+        if (factKey != null && factKey.length() > 50) {
+            log.warn("Fact key exceeded 50 chars, truncating: {}", factKey.substring(0, 50));
+            this.factKey = factKey.substring(0, 50);
+        } else {
+            this.factKey = factKey;
+        }
     }
-    
+
     public String getKind() {
         return kind;
     }
-    
+
     public void setKind(String kind) {
         this.kind = kind;
     }
-    
+
     public String getSubjectType() {
         return subjectType;
     }
-    
+
     public void setSubjectType(String subjectType) {
         this.subjectType = subjectType;
     }
-    
+
     public String getSubjectId() {
         return subjectId;
     }
-    
+
+    /**
+     * Set subject ID with validation.
+     * Truncates to 255 characters if needed.
+     */
     public void setSubjectId(String subjectId) {
-        this.subjectId = subjectId;
+        if (subjectId != null && subjectId.length() > 255) {
+            log.warn("Subject ID exceeded 255 chars, truncating: {}", subjectId.substring(0, 100) + "...");
+            this.subjectId = subjectId.substring(0, 255);
+        } else {
+            this.subjectId = subjectId;
+        }
     }
-    
+
     public String getPredicate() {
         return predicate;
     }
-    
+
+    /**
+     * Set predicate with validation.
+     * Truncates to 255 characters if needed.
+     */
     public void setPredicate(String predicate) {
-        this.predicate = predicate;
+        if (predicate != null && predicate.length() > 255) {
+            log.warn("Predicate exceeded 255 chars, truncating: {}", predicate.substring(0, 100) + "...");
+            this.predicate = predicate.substring(0, 255);
+        } else {
+            this.predicate = predicate;
+        }
     }
-    
+
     public String getFactValue() {
         return factValue;
     }
-    
+
     public void setFactValue(String factValue) {
         this.factValue = factValue;
     }
-    
+
     public String getSource() {
         return source;
     }
-    
+
     public void setSource(String source) {
         this.source = source;
     }
-    
+
     public Integer getCreatedBeat() {
         return createdBeat;
     }
-    
+
     public void setCreatedBeat(Integer createdBeat) {
         this.createdBeat = createdBeat;
     }
-    
+
     public Integer getCreatedExchange() {
         return createdExchange;
     }
-    
+
     public void setCreatedExchange(Integer createdExchange) {
         this.createdExchange = createdExchange;
     }
-    
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
-    
+
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
     }

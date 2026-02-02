@@ -81,7 +81,7 @@ public class StanzaPersistenceService {
         StanzaCharacter userChar = createUserCharacter(stanza, initialized.getUserCharacter(), persona.getName());
         stanza.getCharacters().add(userChar);
         
-        // 3. Create user's private facts + secrets (from privateBackstory + doesNotKnow in other chars)
+        // 3. Create user's private facts + secrets
         createUserPrivateFacts(stanza, initialized);
         
         // 4. Create explicit characters
@@ -96,7 +96,7 @@ public class StanzaPersistenceService {
             stanza.getCharacters().add(character);
         }
         
-        // 6. Create background characters (simplified - just name and role)
+        // 6. Create background characters
         for (var bgChar : initialized.getBackgroundCharacters()) {
             StanzaCharacter character = createBackgroundCharacterEntity(stanza, bgChar);
             stanza.getCharacters().add(character);
@@ -108,10 +108,13 @@ public class StanzaPersistenceService {
             stanza.getTensions().add(tension);
         }
         
-        // 8. Now link character knowledge (after all chars and facts exist)
+        // 8. Now link character knowledge
         linkCharacterKnowledge(stanza, initialized);
         
-        // 9. Save everything (cascade will handle children)
+        // 9. Initialize first beat (NEW!)
+        stanza.initializeFirstBeat();
+        
+        // 10. Save everything (cascade will handle children)
         Stanza saved = stanzaRepository.save(stanza);
         
         log.info("[Persistence] Stanza saved with ID: {}", saved.getId());
@@ -581,6 +584,8 @@ public class StanzaPersistenceService {
         stanza.getTensions().size();
         stanza.getFacts().size();
         stanza.getSecrets().size();
+        stanza.getBeats().size(); 
+        stanza.getEvents().size();
         
         // Also initialize nested collections on characters
         for (StanzaCharacter character : stanza.getCharacters()) {

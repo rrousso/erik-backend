@@ -50,6 +50,7 @@ public class FlowStrategyFactory {
             ContinueStanzaStrategy continueStanzaStrategy,
             EndStanzaStrategy endStanzaStrategy,
             AbandonStanzaStrategy abandonStanzaStrategy,
+            NextBeatStrategy nextBeatStrategy,
             VoidModeStrategy voidModeStrategy,
             StanzaModeStrategy stanzaModeStrategy) {
         
@@ -60,7 +61,8 @@ public class FlowStrategyFactory {
             Flag.PAUSE_STANZA, pauseStanzaStrategy,
             Flag.CONTINUE_STANZA, continueStanzaStrategy,
             Flag.END_STANZA, endStanzaStrategy,
-            Flag.ABANDON_STANZA, abandonStanzaStrategy
+            Flag.ABANDON_STANZA, abandonStanzaStrategy,
+			Flag.NEXT_BEAT, nextBeatStrategy
         );
         
         this.voidModeStrategy = voidModeStrategy;
