@@ -9,8 +9,13 @@ import com.github.rrousso.erik_core.domain.enums.ModelType;
 import com.github.rrousso.erik_core.domain.models.ConversationHistory;
 import com.github.rrousso.erik_core.dto.openrouter.OpenRouterError;
 import com.github.rrousso.erik_core.dto.openrouter.OpenRouterResponse;
+import com.github.rrousso.erik_core.exceptions.configuration.MissingConfigException;
+import com.github.rrousso.erik_core.exceptions.llm.LLMApiException;
+import com.github.rrousso.erik_core.exceptions.llm.LLMInvalidResponseException;
+import com.github.rrousso.erik_core.exceptions.llm.LLMParsingException;
 import com.github.rrousso.erik_core.services.config.LLMConfigService;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -55,14 +60,14 @@ public class LLMClientService {
     /**
      * Simple system + user prompt call (legacy method - defaults to NARRATIVE)
      */
-    public String callNarrator(String systemPrompt, String userPrompt) throws Exception {
+    public String callNarrator(String systemPrompt, String userPrompt) {
         return call(ModelType.NARRATIVE, systemPrompt, userPrompt);
     }
     
     /**
      * Simple system + user prompt call with model type selection
      */
-    public String call(ModelType modelType, String systemPrompt, String userPrompt) throws Exception {
+    public String call(ModelType modelType, String systemPrompt, String userPrompt){
         // Input validation
         Objects.requireNonNull(modelType, "modelType cannot be null");
         Objects.requireNonNull(systemPrompt, "systemPrompt cannot be null");
@@ -101,7 +106,7 @@ public class LLMClientService {
     public String callWithHistory(
             String systemPrompt, 
             String userPrompt,
-            List<ConversationHistory.Message> history) throws Exception {
+            List<ConversationHistory.Message> history) {
         return callWithHistory(ModelType.NARRATIVE, systemPrompt, userPrompt, history);
     }
     
@@ -112,7 +117,7 @@ public class LLMClientService {
             ModelType modelType,
             String systemPrompt,
             String userPrompt,
-            List<ConversationHistory.Message> history) throws Exception {
+            List<ConversationHistory.Message> history) {
 
         // Input validation
         Objects.requireNonNull(modelType, "modelType cannot be null");
@@ -188,12 +193,12 @@ public class LLMClientService {
     /**
      * Shared request sending logic
      */
-    private String sendRequest(String body, String modelType) throws Exception {
+    private String sendRequest(String body, String modelType) {
         String apiKey = configService.getApiKey();
         if (apiKey == null || apiKey.isEmpty()) {
             log.error("API key not configured");
-            throw new RuntimeException("API key not configured. " +
-                "Set OPENROUTER_API_KEY environment variable or in application.yml");
+            throw new MissingConfigException("OPENROUTER_API_KEY",
+                    "Set environment variable or add to application.properties");
         }
 
         log.debug("Sending request to OpenRouter API...");
@@ -208,7 +213,17 @@ public class LLMClientService {
             .POST(HttpRequest.BodyPublishers.ofString(body))
             .build();
 
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response;
+        try {
+            response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException e) {
+            log.error("Network error calling OpenRouter API", e);
+            throw new LLMApiException("Network error calling LLM API", e);
+        } catch (InterruptedException e) {
+            log.error("Request interrupted", e);
+            Thread.currentThread().interrupt();  // Restore interrupt status
+            throw new LLMApiException("Request interrupted", e);
+        }
 
         log.info("Received response (HTTP {})", response.statusCode());
         log.debug("Response body length: {} chars", response.body().length());
@@ -244,18 +259,18 @@ public class LLMClientService {
      * @return The content text from the assistant's message
      * @throws Exception if response contains error or cannot be parsed
      */
-    private String parseResponse(String responseBody) throws Exception {
+    private String parseResponse(String responseBody){
         // First, try to parse as error response
         if (responseBody.contains("\"error\"")) {
             try {
                 OpenRouterError errorResponse = objectMapper.readValue(responseBody, OpenRouterError.class);
                 String errorMsg = errorResponse.toString();
                 log.error("OpenRouter API returned error: {}", errorMsg);
-                throw new RuntimeException("OpenRouter API Error: " + errorMsg);
+                throw new LLMApiException("OpenRouter API returned error", errorMsg);
             } catch (Exception e) {
                 // If error parsing fails, log the raw response
                 log.error("Failed to parse error response: {}", responseBody);
-                throw new RuntimeException("OpenRouter API Error (unparseable): " + responseBody);
+                throw new LLMApiException("OpenRouter API returned error", responseBody);
             }
         }
         
@@ -268,7 +283,7 @@ public class LLMClientService {
             if (content == null) {
                 log.error("No content in OpenRouter response. Choices: {}", 
                     successResponse.getChoices() != null ? successResponse.getChoices().size() : 0);
-                throw new RuntimeException("No content in OpenRouter response");
+                throw new LLMInvalidResponseException("No content in response");
             }
             
             log.debug("Successfully extracted content ({} chars)", content.length());
@@ -277,7 +292,7 @@ public class LLMClientService {
         } catch (Exception e) {
             log.error("Failed to parse OpenRouter response", e);
             log.debug("Response body: {}", responseBody);
-            throw new RuntimeException("Failed to parse OpenRouter response: " + e.getMessage(), e);
+            throw new LLMParsingException("OpenRouter API response", responseBody, e);
         }
     }
     

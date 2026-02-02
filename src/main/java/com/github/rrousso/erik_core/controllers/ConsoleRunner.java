@@ -3,7 +3,7 @@ package com.github.rrousso.erik_core.controllers;
 import com.github.rrousso.erik_core.domain.models.SessionState;
 import com.github.rrousso.erik_core.domain.valueobjects.CommandResult;
 import com.github.rrousso.erik_core.services.command.CommandService;
-import com.github.rrousso.erik_core.services.config.ConfigService;
+import com.github.rrousso.erik_core.services.config.PersonaService;
 import com.github.rrousso.erik_core.services.orchestration.SessionFlowService;
 
 import org.springframework.stereotype.Component;
@@ -21,13 +21,13 @@ import java.util.Scanner;
 @Component
 public class ConsoleRunner {
     private final SessionFlowService sessionFlow;
-    private final ConfigService configService;
+    private final PersonaService configService;
     private final CommandService commandService;
     private final SessionState state = new SessionState();
 
     public ConsoleRunner(
             SessionFlowService sessionFlow, 
-            ConfigService configService,
+            PersonaService configService,
             CommandService commandService) {  
         this.sessionFlow = sessionFlow;
         this.configService = configService;

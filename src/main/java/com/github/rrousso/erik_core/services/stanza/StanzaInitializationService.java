@@ -16,7 +16,7 @@ import com.github.rrousso.erik_core.domain.enums.ModelType;
 import com.github.rrousso.erik_core.domain.models.ConversationHistory;
 import com.github.rrousso.erik_core.dto.initialization.InitializedStanza;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
-import com.github.rrousso.erik_core.services.config.ConfigService;
+import com.github.rrousso.erik_core.services.config.PersonaService;
 import com.github.rrousso.erik_core.services.llm.LLMClientService;
 import com.github.rrousso.erik_core.services.prompt.PromptLoaderService;
 import com.github.rrousso.erik_core.util.JsonCleanupUtil;
@@ -46,12 +46,12 @@ public class StanzaInitializationService {
     
     private final LLMClientService llmClient;
     private final PromptLoaderService promptLoader;
-    private final ConfigService configService;
+    private final PersonaService configService;
     
     public StanzaInitializationService(
             LLMClientService llmClient,
             PromptLoaderService promptLoader,
-            ConfigService configService) {
+            PersonaService configService) {
         this.llmClient = llmClient;
         this.promptLoader = promptLoader;
         this.configService = configService;

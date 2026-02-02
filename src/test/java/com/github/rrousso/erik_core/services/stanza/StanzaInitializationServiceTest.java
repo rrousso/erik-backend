@@ -17,7 +17,7 @@ import com.github.rrousso.erik_core.dto.initialization.InitializedStanza;
 import com.github.rrousso.erik_core.dto.initialization.StanzaCharacter;
 import com.github.rrousso.erik_core.dto.initialization.UserCharacter;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
-import com.github.rrousso.erik_core.services.config.ConfigService;
+import com.github.rrousso.erik_core.services.config.PersonaService;
 import com.github.rrousso.erik_core.services.llm.LLMClientService;
 import com.github.rrousso.erik_core.services.prompt.PromptLoaderService;
 
@@ -32,7 +32,7 @@ public class StanzaInitializationServiceTest {
     private PromptLoaderService promptLoader;
     
     @Mock
-    private ConfigService configService;
+    private PersonaService configService;
     
     @Mock
     private Stanza mockLoadedStanza;

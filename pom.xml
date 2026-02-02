@@ -66,18 +66,14 @@
             <scope>test</scope>
         </dependency>
         
-        <!-- Byte Buddy 1.15+ supports Java 23 -->
+        <!-- ByteBuddy is managed by Spring Boot and needed by Hibernate at runtime -->
         <dependency>
             <groupId>net.bytebuddy</groupId>
             <artifactId>byte-buddy</artifactId>
-            <version>1.15.10</version>
-            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>net.bytebuddy</groupId>
             <artifactId>byte-buddy-agent</artifactId>
-            <version>1.15.10</version>
-            <scope>test</scope>
         </dependency>
         
         <dependency>
