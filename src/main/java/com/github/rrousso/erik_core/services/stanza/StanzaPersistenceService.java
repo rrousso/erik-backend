@@ -26,6 +26,7 @@ import com.github.rrousso.erik_core.persistence.entities.Stanza;
 import com.github.rrousso.erik_core.persistence.entities.StanzaCharacter;
 import com.github.rrousso.erik_core.persistence.entities.Tension;
 import com.github.rrousso.erik_core.persistence.repositories.StanzaRepository;
+import com.github.rrousso.erik_core.util.FactUtility;
 
 import jakarta.transaction.Transactional;
 
@@ -278,7 +279,7 @@ public class StanzaPersistenceService {
         
         // Create facts from user's knownFacts (these are public, user knows them)
         for (String factText : user.getKnownFacts()) {
-            String factKey = generateFactKey(factText, "user_knows");
+            String factKey = FactUtility.generateFactKey(factText);
             createFact(stanza, factKey, "USER_PUBLIC", "user", null, "knows", factText, "USER_SAID");
         }
         
@@ -295,7 +296,7 @@ public class StanzaPersistenceService {
         // Scan all characters' doesNotKnow lists for user-related secrets
         List<String> userSecrets = collectUserSecrets(initialized);
         for (String secretText : userSecrets) {
-            String factKey = generateFactKey(secretText, "user_secret");
+            String factKey = FactUtility.generateFactKey(secretText);
             
             // Check if fact already exists
             if (!factsByKey.containsKey(factKey)) {
@@ -364,7 +365,7 @@ public class StanzaPersistenceService {
     private void linkKnowledgeForCharacter(Stanza stanza, StanzaCharacter character, List<String> knowledgeItems) {
         for (String item : knowledgeItems) {
             // Create or find fact for this knowledge
-            String factKey = generateFactKey(item, "char_knows");
+            String factKey = FactUtility.generateFactKey(item);
             Fact fact = factsByKey.get(factKey);
             
             if (fact == null) {
@@ -387,7 +388,7 @@ public class StanzaPersistenceService {
     private void linkSecretStatesForCharacter(Stanza stanza, StanzaCharacter character, List<String> doesNotKnow) {
         for (String item : doesNotKnow) {
             // Find the secret that locks this fact
-            String factKey = generateFactKey(item, "user_secret");
+            String factKey = FactUtility.generateFactKey(item);
             Fact fact = factsByKey.get(factKey);
             
             if (fact != null) {
@@ -418,11 +419,15 @@ public class StanzaPersistenceService {
         if (factsByKey.containsKey(factKey)) {
             return factsByKey.get(factKey);
         }
+        // Truncate fields to prevent database constraint violations
+        String truncatedPredicate = FactUtility.truncatePredicate(predicate, "createFact: " + factKey);
+        String truncatedSubjectId = FactUtility.truncateSubjectId(subjectId, "createFact: " + factKey);
         
-        Fact fact = new Fact(stanza, factKey, kind, predicate);
+        Fact fact = new Fact(stanza, factKey, kind, truncatedPredicate);
         fact.setSubjectType(subjectType);
-        fact.setSubjectId(subjectId);
+        fact.setSubjectId(truncatedSubjectId);
         fact.setFactValue(wrapAsJson(value));
+        fact.setPredicate(truncatedPredicate);
         fact.setSource(source);
         fact.setCreatedBeat(0);
         fact.setCreatedExchange(0);
@@ -440,33 +445,6 @@ public class StanzaPersistenceService {
         Secret secret = new Secret(stanza, fact, inferable, allowedModes);
         stanza.getSecrets().add(secret);
         return secret;
-    }
-    
-    /**
-     * Generate a fact key from text (max 50 chars, snake_case)
-     */
-    private String generateFactKey(String text, String prefix) {
-        // Normalize: lowercase, replace spaces/special chars with underscore
-        String normalized = text.toLowerCase()
-            .replaceAll("[^a-z0-9]+", "_")
-            .replaceAll("^_|_$", "")  // Trim leading/trailing underscores
-            .replaceAll("__+", "_");   // Collapse multiple underscores
-        
-        // Prefix and truncate to 50 chars
-        String key = prefix + "_" + normalized;
-        if (key.length() > 50) {
-            key = key.substring(0, 50);
-        }
-        
-        // Handle collisions by appending number if key exists
-        String baseKey = key;
-        int counter = 1;
-        while (factsByKey.containsKey(key)) {
-            key = baseKey.substring(0, Math.min(baseKey.length(), 47)) + "_" + counter;
-            counter++;
-        }
-        
-        return key;
     }
     
     /**

@@ -11,6 +11,7 @@ import com.github.rrousso.erik_core.persistence.entities.CharacterKnowledge;
 import com.github.rrousso.erik_core.persistence.entities.Fact;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
 import com.github.rrousso.erik_core.persistence.entities.StanzaCharacter;
+import com.github.rrousso.erik_core.util.FactUtility;
 
 /**
  * Applier for knowledge transfer extractions.
@@ -36,7 +37,6 @@ public class KnowledgeTransferApplier implements ExtractionApplier<KnowledgeTran
     private static final Logger log = LoggerFactory.getLogger(KnowledgeTransferApplier.class);
     
     private static final int MAX_DESCRIPTION_LENGTH = 200;
-    private static final int MAX_KEY_LENGTH = 50;
     
     @Override
     public void apply(Stanza stanza, KnowledgeTransfer transfer) {
@@ -69,12 +69,14 @@ public class KnowledgeTransferApplier implements ExtractionApplier<KnowledgeTran
         String corePredicate = transfer.getWhatTheyLearned();
         
         // Generate key from CORE predicate (before adding context)
-        String factKey = generateFactKey(corePredicate);
+        String factKey = FactUtility.generateFactKey(corePredicate);
         fact.setFactKey(factKey);
         
-        // NOW add context to the predicate (this might make it longer, but key is already set)
-        // Note: Consider if we need this prefix - it might be redundant with CharacterKnowledge link
-        fact.setPredicate(corePredicate); // Using core predicate without prefix
+        String truncatedPredicate = FactUtility.truncatePredicate(
+        	    corePredicate, 
+        	    "KnowledgeTransfer: " + transfer.getCharacterName()
+        	);
+        fact.setPredicate(truncatedPredicate);
         
         fact.setStanza(stanza);
         fact.setKind("OBSERVED"); // Default kind - could be enhanced based on howLearned
@@ -111,55 +113,4 @@ public class KnowledgeTransferApplier implements ExtractionApplier<KnowledgeTran
         return "KnowledgeTransfer";
     }
     
-    /**
-     * Generate a fact key from a description with guaranteed uniqueness.
-     * 
-     * Uses a hybrid approach:
-     * - First 40 chars: human-readable prefix (normalized)
-     * - Last 8 chars: hash of full description (ensures uniqueness)
-     * 
-     * This prevents truncation issues while keeping keys under 50 chars.
-     * 
-     * Examples:
-     * - "Supernatural world exists" → "supernatural_world_exists_a3f8b2c1"
-     * - "He lost Alan's phone charger" → "he_lost_alan_s_phone_charger_9d4e2f01"
-     * - "Very long description that would normally get truncated..." → "very_long_description_that_would_norma_7ab3c9f2"
-     * 
-     * @param description The fact description
-     * @return A unique key under 50 characters
-     */
-    private String generateFactKey(String description) {
-        if (description == null || description.isEmpty()) {
-            return "unknown_fact_" + Integer.toHexString("unknown".hashCode());
-        }
-        
-        // Normalize: lowercase, replace non-alphanumeric with underscore
-        String normalized = description.toLowerCase()
-            .replaceAll("[^a-z0-9]+", "_")
-            .replaceAll("^_+|_+$", ""); // Remove leading/trailing underscores
-        
-        // Generate hash for uniqueness (8 hex chars)
-        String hash = String.format("%08x", description.hashCode());
-        
-        // Calculate max prefix length (50 - 1 separator - 8 hash = 41)
-        int maxPrefixLength = 41;
-        
-        // Truncate prefix if needed
-        String prefix = normalized.length() > maxPrefixLength 
-            ? normalized.substring(0, maxPrefixLength) 
-            : normalized;
-        
-        // Remove trailing underscore if truncation created one
-        prefix = prefix.replaceAll("_+$", "");
-        
-        // Combine: prefix_hash
-        String key = prefix + "_" + hash;
-        
-        // Guarantee under 50 chars (should always be true, but safety check)
-        if (key.length() > MAX_KEY_LENGTH) {
-            key = prefix.substring(0, MAX_KEY_LENGTH - 9) + "_" + hash;
-        }
-        
-        return key;
-    }
 }
