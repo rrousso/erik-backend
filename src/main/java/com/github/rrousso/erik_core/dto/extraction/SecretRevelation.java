@@ -16,7 +16,8 @@ package com.github.rrousso.erik_core.dto.extraction;
  */
 public class SecretRevelation {
     
-    private String secretDescription;
+    private String secretDescription;    // DEPRECATED - for backward compatibility
+    private String secretHash;           // preferred way to reference secrets
     private String characterName;
     private String newState;  // KNOWS, SUSPICIOUS
     private String howRevealed;
@@ -33,6 +34,14 @@ public class SecretRevelation {
     }
     
     // === GETTERS AND SETTERS ===
+    
+	public String getSecretHash() {
+		return secretHash;
+	}
+
+	public void setSecretHash(String secretHash) {
+		this.secretHash = secretHash;
+	}
     
     public String getSecretDescription() {
         return secretDescription;
@@ -80,6 +89,10 @@ public class SecretRevelation {
      */
     public boolean isSuspicious() {
         return "SUSPICIOUS".equalsIgnoreCase(newState);
+    }
+    
+    public boolean isHashReference() {
+        return secretHash != null && !secretHash.isEmpty();
     }
     
     @Override

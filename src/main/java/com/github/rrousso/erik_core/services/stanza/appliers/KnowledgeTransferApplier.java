@@ -36,15 +36,14 @@ public class KnowledgeTransferApplier implements ExtractionApplier<KnowledgeTran
     
     private static final Logger log = LoggerFactory.getLogger(KnowledgeTransferApplier.class);
     
-    private static final int MAX_DESCRIPTION_LENGTH = 200;
+    private static final int MAX_LEARNED_LENGTH = 200;
     
     @Override
     public void apply(Stanza stanza, KnowledgeTransfer transfer) {
-        // Validate description length (soft warning - we don't truncate facts)
-        if (transfer.getWhatTheyLearned() != null && transfer.getWhatTheyLearned().length() > MAX_DESCRIPTION_LENGTH) {
-            log.warn("[KnowledgeTransferApplier] Knowledge description exceeds recommended {} characters: '{}'",
-                MAX_DESCRIPTION_LENGTH,
-                transfer.getWhatTheyLearned().substring(0, Math.min(100, transfer.getWhatTheyLearned().length())) + "...");
+        // Validate input
+        if (transfer.getWhatTheyLearned() != null && transfer.getWhatTheyLearned().length() > MAX_LEARNED_LENGTH) {
+            log.warn("[KnowledgeTransferApplier] 'whatTheyLearned' exceeds recommended {} characters", 
+                MAX_LEARNED_LENGTH);
         }
         
         // 1. Find the character by name (case-insensitive)
@@ -60,52 +59,90 @@ public class KnowledgeTransferApplier implements ExtractionApplier<KnowledgeTran
         }
         
         StanzaCharacter character = charOpt.get();
+        Fact fact;
         
-        // 2. Create the Fact entity (the knowledge itself)
-        Fact fact = new Fact();
+        // 2. Determine if this is a reference to existing fact or a new fact
+        if (transfer.isExistingFactReference()) {
+            // CASE A: Character learned an EXISTING fact
+            fact = findFactByHash(stanza, transfer.getExistingFactHash());
+            
+            if (fact == null) {
+                log.warn("[KnowledgeTransferApplier] Fact with hash '{}' not found - skipping", 
+                    transfer.getExistingFactHash());
+                return;
+            }
+            
+            log.debug("[KnowledgeTransferApplier] Character '{}' learned existing fact [{}]: {}", 
+                character.getName(), 
+                transfer.getExistingFactHash(),
+                fact.getPredicate());
+            
+        } else if (transfer.isNewFact()) {
+            // CASE B: Character learned NEW emergent fact
+            fact = new Fact();
+            
+            String corePredicate = transfer.getWhatTheyLearned();
+            String factKey = FactUtility.generateFactKey(corePredicate);
+            
+            fact.setFactKey(factKey);
+            fact.setPredicate(FactUtility.truncatePredicate(corePredicate, "KnowledgeTransfer from " + character.getName()));
+            fact.setStanza(stanza);
+            fact.setKind("OBSERVED"); // Emerged from narration
+            fact.setFactValue("true");
+            fact.setSource("NARRATOR_EMERGENT");
+            fact.setCreatedBeat(stanza.getCurrentBeatNumber());
+            fact.setCreatedExchange(stanza.getCurrentExchange());
+            
+            // Add to stanza's facts collection
+            stanza.getFacts().add(fact);
+            
+            String hash = FactUtility.extractHash(factKey);
+            log.debug("[KnowledgeTransferApplier] Created NEW fact [{}]: {}", 
+                hash,
+                corePredicate);
+            
+        } else {
+            log.warn("[KnowledgeTransferApplier] KnowledgeTransfer has neither whatTheyLearned nor existingFactHash - skipping");
+            return;
+        }
         
-        // CRITICAL: Extract core predicate BEFORE any concatenation
-        // This prevents the key from including prefixes/character names
-        String corePredicate = transfer.getWhatTheyLearned();
+        // 3. Check if character already knows this fact
+        boolean alreadyKnows = character.getKnownFacts().stream()
+            .anyMatch(ck -> ck.getFact().getId().equals(fact.getId()));
         
-        // Generate key from CORE predicate (before adding context)
-        String factKey = FactUtility.generateFactKey(corePredicate);
-        fact.setFactKey(factKey);
+        if (alreadyKnows) {
+            log.debug("[KnowledgeTransferApplier] Character '{}' already knows fact [{}] - skipping duplicate", 
+                character.getName(),
+                FactUtility.extractHash(fact.getFactKey()));
+            return;
+        }
         
-        String truncatedPredicate = FactUtility.truncatePredicate(
-        	    corePredicate, 
-        	    "KnowledgeTransfer: " + transfer.getCharacterName()
-        	);
-        fact.setPredicate(truncatedPredicate);
-        
-        fact.setStanza(stanza);
-        fact.setKind("OBSERVED"); // Default kind - could be enhanced based on howLearned
-        fact.setFactValue("true"); // Simple boolean fact
-        fact.setSource("NARRATOR_EMERGENT"); // Source is the narration
-        fact.setCreatedBeat(stanza.getCurrentBeatNumber());
-        fact.setCreatedExchange(stanza.getCurrentExchange());
-        
-        // Add fact to stanza's facts collection
-        stanza.getFacts().add(fact);
-        
-        // 3. Create CharacterKnowledge linking character to fact
+        // 4. Create CharacterKnowledge linking character to fact
         CharacterKnowledge knowledge = new CharacterKnowledge();
-        
         knowledge.setCharacter(character);
         knowledge.setFact(fact);
-        knowledge.setHow(transfer.getHowLearned()); // OBSERVED, TOLD, INFERRED
+        knowledge.setHow(transfer.getHowLearned());
         knowledge.setStatus("LEARNED");
         knowledge.setLearnedBeat(stanza.getCurrentBeatNumber());
         knowledge.setLearnedExchange(stanza.getCurrentExchange());
         
-        // 4. Add to character's knownFacts collection
+        // 5. Add to character's knownFacts collection
         character.getKnownFacts().add(knowledge);
         
-        log.debug("[KnowledgeTransferApplier] Created knowledge: {} learned '{}' via {} (key: {})", 
+        log.debug("[KnowledgeTransferApplier] {} learned '{}' via {}", 
             character.getName(), 
-            corePredicate,
-            transfer.getHowLearned(),
-            factKey);
+            fact.getPredicate(),
+            transfer.getHowLearned());
+    }
+
+    /**
+     * Find a fact by its hash suffix
+     */
+    private Fact findFactByHash(Stanza stanza, String hash) {
+        return stanza.getFacts().stream()
+            .filter(f -> FactUtility.matchesHash(f.getFactKey(), hash))
+            .findFirst()
+            .orElse(null);
     }
     
     @Override

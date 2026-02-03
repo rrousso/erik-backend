@@ -1,35 +1,15 @@
 package com.github.rrousso.erik_core.dto.extraction;
 
-/**
- * DTO representing a knowledge transfer - when a character learns something.
- * 
- * Maps to the JSON structure:
- * {
- *   "characterName": "name of character who learned something",
- *   "whatTheyLearned": "description of the knowledge gained",
- *   "howLearned": "OBSERVED" | "TOLD" | "INFERRED"
- * }
- * 
- * This will be used to create CharacterKnowledge entries in the database,
- * tracking what each character knows and how they learned it.
- */
 public class KnowledgeTransfer {
     
     private String characterName;
-    private String whatTheyLearned;
-    private String howLearned;  // OBSERVED, TOLD, INFERRED
-    
-    // === CONSTRUCTORS ===
+    private String whatTheyLearned;        // Used for NEW facts
+    private String existingFactHash;       // Used to reference existing facts
+    private String howLearned;
     
     public KnowledgeTransfer() {}
     
-    public KnowledgeTransfer(String characterName, String whatTheyLearned, String howLearned) {
-        this.characterName = characterName;
-        this.whatTheyLearned = whatTheyLearned;
-        this.howLearned = howLearned;
-    }
-    
-    // === GETTERS AND SETTERS ===
+    // Getters and setters
     
     public String getCharacterName() {
         return characterName;
@@ -47,6 +27,14 @@ public class KnowledgeTransfer {
         this.whatTheyLearned = whatTheyLearned;
     }
     
+    public String getExistingFactHash() {
+        return existingFactHash;
+    }
+    
+    public void setExistingFactHash(String existingFactHash) {
+        this.existingFactHash = existingFactHash;
+    }
+    
     public String getHowLearned() {
         return howLearned;
     }
@@ -55,32 +43,17 @@ public class KnowledgeTransfer {
         this.howLearned = howLearned;
     }
     
-    // === CONVENIENCE METHODS ===
-    
     /**
-     * Check if knowledge was observed
+     * Check if this is a reference to an existing fact
      */
-    public boolean wasObserved() {
-        return "OBSERVED".equalsIgnoreCase(howLearned);
+    public boolean isExistingFactReference() {
+        return existingFactHash != null && !existingFactHash.isEmpty();
     }
     
     /**
-     * Check if knowledge was told
+     * Check if this is a new fact
      */
-    public boolean wasTold() {
-        return "TOLD".equalsIgnoreCase(howLearned);
-    }
-    
-    /**
-     * Check if knowledge was inferred
-     */
-    public boolean wasInferred() {
-        return "INFERRED".equalsIgnoreCase(howLearned);
-    }
-    
-    @Override
-    public String toString() {
-        return String.format("KnowledgeTransfer[%s learned '%s' via %s]", 
-            characterName, whatTheyLearned, howLearned);
+    public boolean isNewFact() {
+        return whatTheyLearned != null && !whatTheyLearned.isEmpty();
     }
 }

@@ -6,11 +6,20 @@ import org.springframework.stereotype.Service;
 
 import com.github.rrousso.erik_core.domain.models.SessionState;
 import com.github.rrousso.erik_core.domain.valueobjects.CommandResult;
+import com.github.rrousso.erik_core.persistence.entities.CharacterKnowledge;
+import com.github.rrousso.erik_core.persistence.entities.CharacterSecretState;
+import com.github.rrousso.erik_core.persistence.entities.Fact;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
+import com.github.rrousso.erik_core.persistence.entities.StanzaCharacter;
+import com.github.rrousso.erik_core.persistence.entities.StanzaEvent;
+import com.github.rrousso.erik_core.persistence.entities.Tension;
 import com.github.rrousso.erik_core.persistence.repositories.StanzaRepository;
 import com.github.rrousso.erik_core.services.stanza.StanzaPersistenceService;
+import com.github.rrousso.erik_core.util.FactUtility;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Handles explicit commands prefixed with "/".
@@ -72,6 +81,7 @@ public class CommandService {
             case "search" -> handleSearch(args);
             case "load" -> handleLoad(args, state);
             case "clear" -> handleClear(state);
+            case "debug" -> handleDebug(state);
             default -> CommandResult.handled("[System] Unknown command: /" + command + ". Type /help for available commands.");
         };
     }
@@ -89,10 +99,12 @@ public class CommandService {
             /search [section]: [keywords] 	- Search on specific stanza sections by keywords. Available sections: setting-premise-tone-character					
             /load [id]         				- Load a stanza into Erik's memory for reference
             /clear             				- Clear loaded stanza memory
+            /debug                          - Show current stanza state (facts, secrets, knowledge)
             
             Examples:
               /search vampire romance
               /load 5
+              /debug
             """;
         return CommandResult.handled(help);
     }
@@ -218,6 +230,204 @@ public class CommandService {
         
         state.setLoadedStanzaMemory(null);
         return CommandResult.handled("[System] Cleared stanza memory.");
+    }
+    
+    private CommandResult handleDebug(SessionState state) {
+        Long activeStanzaId = state.getActiveStanzaId();
+        
+        if (activeStanzaId == null) {
+            return CommandResult.handled("\n[Debug] No active stanza. Start a stanza first with 'let's begin'.\n");
+        }
+        
+        // Load the stanza with all relationships
+        Stanza activeStanza;
+        try {
+            activeStanza = persistenceService.loadStanzaWithRelationships(activeStanzaId);
+        } catch (Exception e) {
+            return CommandResult.handled("\n[Debug] Error loading stanza: " + e.getMessage() + "\n");
+        }
+        
+        StringBuilder sb = new StringBuilder();
+        sb.append("\n╔═══════════════════════════════════════════════════════════════╗\n");
+        sb.append("║              STANZA DEBUG - CURRENT STATE                    ║\n");
+        sb.append("╚═══════════════════════════════════════════════════════════════╝\n\n");
+        
+        // Basic info
+        sb.append("ID: ").append(activeStanza.getId()).append("\n");
+        sb.append("Status: ").append(activeStanza.getStatus()).append("\n");
+        sb.append("Current Beat: ").append(activeStanza.getCurrentBeatNumber()).append("\n");
+        sb.append("Current Exchange: ").append(activeStanza.getCurrentExchange()).append("\n\n");
+        
+        // FACTS REGISTRY
+        sb.append("┌─────────────────────────────────────────────────────────────┐\n");
+        sb.append("│ FACTS REGISTRY                                              │\n");
+        sb.append("└─────────────────────────────────────────────────────────────┘\n");
+        
+        if (activeStanza.getFacts().isEmpty()) {
+            sb.append("  (No facts recorded)\n\n");
+        } else {
+            // Group by kind
+            Map<String, List<Fact>> factsByKind = activeStanza.getFacts().stream()
+                .collect(Collectors.groupingBy(Fact::getKind));
+            
+            for (String kind : new String[]{"USER_PRIVATE", "USER_PUBLIC", "WORLD", "OBSERVED"}) {
+                if (!factsByKind.containsKey(kind)) continue;
+                
+                sb.append("\n  ").append(kind).append(":\n");
+                for (Fact fact : factsByKind.get(kind)) {
+                    String hash = FactUtility.extractHash(fact.getFactKey());
+                    sb.append("    [").append(hash).append("] ").append(fact.getPredicate());
+                    
+                    if (fact.getCreatedBeat() != null && fact.getCreatedBeat() > 0) {
+                        sb.append(" (beat ").append(fact.getCreatedBeat()).append(")");
+                    }
+                    sb.append("\n");
+                }
+            }
+            sb.append("\n");
+        }
+        
+        // CHARACTERS & KNOWLEDGE
+        sb.append("┌─────────────────────────────────────────────────────────────┐\n");
+        sb.append("│ CHARACTERS & KNOWLEDGE                                      │\n");
+        sb.append("└─────────────────────────────────────────────────────────────┘\n\n");
+        
+        if (activeStanza.getCharacters().isEmpty()) {
+            sb.append("  (No characters)\n\n");
+        } else {
+            for (StanzaCharacter character : activeStanza.getCharacters()) {
+                sb.append("  ").append(character.getName());
+                if (character.isUser()) {
+                    sb.append(" (USER)");
+                }
+                sb.append(" [").append(character.getPresenceStatus()).append("]\n");
+                
+                // What they know
+                if (!character.getKnownFacts().isEmpty()) {
+                    sb.append("    Knows (").append(character.getKnownFacts().size()).append(" facts):\n");
+                    for (CharacterKnowledge ck : character.getKnownFacts()) {
+                        String hash = FactUtility.extractHash(ck.getFact().getFactKey());
+                        sb.append("      [").append(hash).append("] ")
+                          .append(ck.getFact().getPredicate())
+                          .append(" (").append(ck.getHow()).append(")\n");
+                    }
+                }
+                
+                // Secrets they don't know
+                List<CharacterSecretState> unknownSecrets = character.getSecretStates().stream()
+                    .filter(css -> "UNAWARE".equals(css.getState()))
+                    .collect(Collectors.toList());
+                
+                if (!unknownSecrets.isEmpty()) {
+                    sb.append("    Does NOT know (").append(unknownSecrets.size()).append(" secrets):\n");
+                    for (CharacterSecretState css : unknownSecrets) {
+                        String hash = FactUtility.extractHash(css.getSecret().getFact().getFactKey());
+                        sb.append("      [").append(hash).append("] SECRET: ")
+                          .append(css.getSecret().getFact().getPredicate()).append("\n");
+                    }
+                }
+                
+                // Secrets they suspect
+                List<CharacterSecretState> suspectedSecrets = character.getSecretStates().stream()
+                    .filter(css -> "SUSPICIOUS".equals(css.getState()))
+                    .collect(Collectors.toList());
+                
+                if (!suspectedSecrets.isEmpty()) {
+                    sb.append("    Suspects (").append(suspectedSecrets.size()).append(" secrets):\n");
+                    for (CharacterSecretState css : suspectedSecrets) {
+                        String hash = FactUtility.extractHash(css.getSecret().getFact().getFactKey());
+                        sb.append("      [").append(hash).append("] SECRET: ")
+                          .append(css.getSecret().getFact().getPredicate()).append("\n");
+                    }
+                }
+                
+                sb.append("\n");
+            }
+        }
+        
+        // TENSIONS
+        sb.append("┌─────────────────────────────────────────────────────────────┐\n");
+        sb.append("│ ACTIVE TENSIONS                                             │\n");
+        sb.append("└─────────────────────────────────────────────────────────────┘\n\n");
+        
+        List<Tension> activeTensions = activeStanza.getTensions().stream()
+            .filter(t -> !"RESOLVED".equals(t.getStatus()))
+            .collect(Collectors.toList());
+        
+        if (activeTensions.isEmpty()) {
+            sb.append("  (No active tensions)\n\n");
+        } else {
+            for (Tension tension : activeTensions) {
+                sb.append("  ▸ ").append(tension.getDescription()).append("\n");
+                sb.append("    Pressure: ").append(tension.getPressure()).append("/10");
+                if (tension.getInvolvedCharacters() != null) {
+                    sb.append(" | Involves: ").append(tension.getInvolvedCharacters());
+                }
+                sb.append("\n\n");
+            }
+        }
+        
+        // RECENT EVENTS
+        sb.append("┌─────────────────────────────────────────────────────────────┐\n");
+        sb.append("│ RECENT EVENTS (last 5)                                      │\n");
+        sb.append("└─────────────────────────────────────────────────────────────┘\n\n");
+        
+        List<StanzaEvent> recentEvents = activeStanza.getEvents().stream()
+            .sorted((e1, e2) -> {
+                int beatCompare = e2.getBeatNumber().compareTo(e1.getBeatNumber());
+                if (beatCompare != 0) return beatCompare;
+                return e2.getExchangeNumber().compareTo(e1.getExchangeNumber());
+            })
+            .limit(5)
+            .collect(Collectors.toList());
+        
+        if (recentEvents.isEmpty()) {
+            sb.append("  (No events recorded)\n\n");
+        } else {
+            for (StanzaEvent event : recentEvents) {
+                sb.append("  [Beat ").append(event.getBeatNumber())
+                  .append(", Ex ").append(event.getExchangeNumber())
+                  .append("] ").append(event.getDescription()).append("\n");
+            }
+            sb.append("\n");
+        }
+        
+        // DUPLICATION ANALYSIS
+        sb.append("┌─────────────────────────────────────────────────────────────┐\n");
+        sb.append("│ DUPLICATION DETECTION                                       │\n");
+        sb.append("└─────────────────────────────────────────────────────────────┘\n\n");
+        
+        Map<String, Long> predicateCounts = activeStanza.getFacts().stream()
+            .collect(Collectors.groupingBy(Fact::getPredicate, Collectors.counting()));
+        
+        List<Map.Entry<String, Long>> duplicates = predicateCounts.entrySet().stream()
+            .filter(e -> e.getValue() > 1)
+            .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
+            .collect(Collectors.toList());
+        
+        if (duplicates.isEmpty()) {
+            sb.append("  ✓ No duplicate predicates detected\n\n");
+        } else {
+            sb.append("  ⚠ WARNING: Potential duplicates found:\n\n");
+            for (Map.Entry<String, Long> dup : duplicates) {
+                sb.append("    \"").append(dup.getKey()).append("\" appears ")
+                  .append(dup.getValue()).append(" times\n");
+                
+                // Show the different hashes
+                activeStanza.getFacts().stream()
+                    .filter(f -> f.getPredicate().equals(dup.getKey()))
+                    .forEach(f -> {
+                        String hash = FactUtility.extractHash(f.getFactKey());
+                        sb.append("      [").append(hash).append("] created beat ")
+                          .append(f.getCreatedBeat()).append("\n");
+                    });
+                sb.append("\n");
+            }
+        }
+        
+        sb.append("═══════════════════════════════════════════════════════════════\n");
+        
+        return CommandResult.handled(sb.toString());
     }
     
     // ========== HELPER METHODS ==========

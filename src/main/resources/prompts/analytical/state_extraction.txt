@@ -15,6 +15,32 @@ ACTIVE TENSIONS:
 RECENT EVENTS:
 {recent_events}
 
+FACT REGISTRY:
+{fact_registry}
+
+⚠️ CRITICAL - DEDUPLICATION RULES:
+
+Before creating a NEW knowledge transfer, check if the fact already exists in the registry above.
+
+If a character learns something that matches an existing fact:
+- Use "existingFactHash" field with the hash from registry (e.g., "a3f8b2c1")
+- Do NOT include "whatTheyLearned" - the hash references the existing fact
+- This prevents duplicate facts in the database
+
+Example - Character learns existing fact:
+{
+  "characterName": "Derek Hale",
+  "existingFactHash": "a3f8b2c1",
+  "howLearned": "OBSERVED"
+}
+
+Example - Character learns something NEW:
+{
+  "characterName": "Stiles",
+  "whatTheyLearned": "User can sense supernatural creatures",
+  "howLearned": "TOLD"
+}
+
 ==========================================================
 THIS EXCHANGE
 ==========================================================
@@ -87,7 +113,8 @@ Respond ONLY with valid JSON in this exact structure. Do not include markdown co
   "knowledgeTransfers": [
     {
       "characterName": "name of character who learned something",
-      "whatTheyLearned": "description of the knowledge gained",
+      "whatTheyLearned": "description of NEW knowledge (omit if using existingFactHash)",
+      "existingFactHash": "8-char hash if this references an existing fact from registry",
       "howLearned": "OBSERVED" | "TOLD" | "INFERRED"
     }
   ],
