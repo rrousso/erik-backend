@@ -1,5 +1,7 @@
 package com.github.rrousso.erik_core.services.prompt;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
@@ -9,11 +11,23 @@ import com.github.rrousso.erik_core.domain.valueobjects.CompletedStanza;
 
 import jakarta.annotation.PostConstruct;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
 /**
  * Spring service for building system prompts with synopsis and recent exchanges included
  */
 @Service
 public class SystemPromptBuilderService {
+    
+    private static final Logger log = LoggerFactory.getLogger(SystemPromptBuilderService.class);
+    private static final Path PROMPTS_DIR = Paths.get("user_data", "generated_prompts");
+    private static final DateTimeFormatter FILENAME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS");
     
     private final PromptLoaderService promptLoader;
     
@@ -51,6 +65,42 @@ public class SystemPromptBuilderService {
         flagDetectionPrompt = promptLoader.load("analytical/flag_detection.txt"); 
         worldSnapshotSynopsis = promptLoader.load("analytical/world_snapshot_synopsis.txt"); 
         System.out.println("[System] Prompts loaded successfully");
+        
+        // Initialize prompts directory
+        initializePromptsDirectory();
+    }
+    
+    /**
+     * Initialize the directory for saving generated prompts
+     */
+    private void initializePromptsDirectory() {
+        try {
+            if (!Files.exists(PROMPTS_DIR)) {
+                Files.createDirectories(PROMPTS_DIR);
+                log.info("[PromptBuilder] Created prompts directory: {}", PROMPTS_DIR);
+            }
+        } catch (IOException e) {
+            log.error("[PromptBuilder] Failed to create prompts directory", e);
+        }
+    }
+    
+    /**
+     * Save a generated prompt to a file with timestamp
+     * 
+     * @param prompt The prompt text to save
+     * @param prefix Prefix for the filename (e.g., "stanza", "void")
+     */
+    private void savePromptToFile(String prompt, String prefix) {
+        try {
+            String timestamp = LocalDateTime.now().format(FILENAME_FORMATTER);
+            String filename = String.format("%s_%s.txt", prefix, timestamp);
+            Path filePath = PROMPTS_DIR.resolve(filename);
+            
+            Files.writeString(filePath, prompt, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            log.debug("[PromptBuilder] Saved {} prompt to: {}", prefix, filename);
+        } catch (IOException e) {
+            log.error("[PromptBuilder] Failed to save {} prompt to file", prefix, e);
+        }
     }
 
     public String buildFlagDetectionPrompt() {
@@ -108,7 +158,7 @@ public class SystemPromptBuilderService {
             throw new IllegalArgumentException("SessionContext must have narrator context (from DB or InitializedStanza)");
         }
         
-        return new PromptComposer()
+        String prompt = new PromptComposer()
             // Identity layer
             .section(fictionalFrame)
             .section(context.getUserPersona())
@@ -121,6 +171,15 @@ public class SystemPromptBuilderService {
             .labeledSectionIf("RECENT EXCHANGES:", context.getRecentExchanges(), context.hasRecentExchanges())
             .dividerIf(context.hasRecentExchanges())
             .build();
+        
+        // Log the generated prompt
+        log.info("[PromptBuilder] Generated stanza prompt ({} chars)", prompt.length());
+        log.debug("[PromptBuilder] Stanza prompt content:\n{}", prompt);
+        
+        // Save to file
+        savePromptToFile(prompt, "stanza");
+        
+        return prompt;
     }
     
     /**
@@ -291,10 +350,17 @@ public class SystemPromptBuilderService {
                 composer.labeledSection("**What happened:**", completed.getQuickSynopsis());
             }
             
-            // Include the initial setup for additional context
-            if (completed.getInitializedStanza() != null) {
-                composer.labeledSection("**Original Setup:**", 
-                    completed.getInitializedStanza().toNarratorContext());
+            // Include the getNarratorContext() or initial setup for additional context
+            String narratorContext = context.getNarratorContext();
+            if (narratorContext != null && !narratorContext.isEmpty()) {
+                composer
+                    .divider()
+                    .section("## Paused Stanza Context")
+                    .labeledSection("**Original Setup:**", narratorContext);
+             
+                if (context.hasSynopsis()) {
+                    composer.labeledSection("**What happened so far:**", context.getSynopsis());
+                }
             }
             
             composer

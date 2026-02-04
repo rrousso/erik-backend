@@ -28,8 +28,8 @@ public class ErikProperties {
     
     // Nested configuration classes
     public static class NarrativeConfig {
-        private String model = "anthropic/claude-3.5-sonnet";
-        private double temperature = 0.9;
+        private String model = "google/gemini-2.5-pro";
+        private double temperature = 0.4;
         private int maxTokens = 1500;
         
         public String getModel() {

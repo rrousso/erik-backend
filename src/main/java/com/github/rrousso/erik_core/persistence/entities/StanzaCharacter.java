@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -112,7 +114,10 @@ public class StanzaCharacter {
     }
     
     /**
-     * Check if character knows a specific fact
+     * Check if character has any knowledge record for this fact.
+     * 
+     * Returns true if character has KNOWS or SUSPICIOUS state.
+     * Returns false if character is UNAWARE (no record exists).
      */
     public boolean knowsFact(Fact fact) {
         return knownFacts.stream()
@@ -133,7 +138,7 @@ public class StanzaCharacter {
      */
     public boolean isUnawareOfFact(Fact fact) {
         return knownFacts.stream()
-            .anyMatch(k -> k.getFact().getId().equals(fact.getId()) && k.isUnaware());
+            .noneMatch(k -> k.getFact().getId().equals(fact.getId()));
     }
     
     /**
@@ -152,6 +157,99 @@ public class StanzaCharacter {
             .filter(k -> k.getFact().getId().equals(fact.getId()))
             .findFirst()
             .orElse(null);
+    }
+    
+    /**
+     * Format character for narrator prompt.
+     * Shows character info + knowledge state using fact hashes.
+     * 
+     * @param restrictedFacts All restricted facts from stanza (to show DOES NOT KNOW)
+     */
+    public String toNarratorContext(List<Fact> restrictedFacts) {
+        StringBuilder sb = new StringBuilder();
+        
+        sb.append("**").append(name.toUpperCase()).append("**\n");
+        
+        if (canonRole != null && !canonRole.isEmpty()) {
+            sb.append("Role: ").append(canonRole).append("\n");
+        }
+        
+        if (relationshipToUser != null && !relationshipToUser.isEmpty()) {
+            sb.append("Relationship to User: ").append(relationshipToUser).append("\n");
+        }
+        
+        if (emotionalState != null && !emotionalState.isEmpty()) {
+            sb.append("Emotional State: ").append(emotionalState).append("\n");
+        }
+        
+        if (motivations != null && motivations.length > 0) {
+            sb.append("Current Motivations:\n");
+            for (String motivation : motivations) {
+                sb.append("  - ").append(motivation).append("\n");
+            }
+        }
+        
+        if (knownFacts.isEmpty() && restrictedFacts.isEmpty()) {
+            // No knowledge tracking needed
+            return sb.toString();
+        }
+        
+        // === CHARACTER KNOWLEDGE ===
+        if (!knownFacts.isEmpty() || !restrictedFacts.isEmpty()) {
+            sb.append("\n");
+            
+            // Collect fact hashes by awareness state
+            List<String> knowsHashes = new ArrayList<>();
+            List<String> suspectsHashes = new ArrayList<>();
+            
+            for (CharacterKnowledge ck : knownFacts) {
+                String hash = com.github.rrousso.erik_core.util.FactUtility.extractHash(ck.getFact().getFactKey());
+                if ("KNOWS".equals(ck.getAwarenessState())) {
+                    knowsHashes.add(hash);
+                } else if ("SUSPICIOUS".equals(ck.getAwarenessState())) {
+                    suspectsHashes.add(hash);
+                }
+            }
+            
+            // Determine DOES NOT KNOW: restricted facts not in knownFacts
+            Set<Long> trackedFactIds = knownFacts.stream()
+                .map(ck -> ck.getFact().getId())
+                .collect(Collectors.toSet());
+                
+            List<String> doesNotKnowHashes = new ArrayList<>();
+            for (Fact restrictedFact : restrictedFacts) {
+                if (!trackedFactIds.contains(restrictedFact.getId())) {
+                    String hash = com.github.rrousso.erik_core.util.FactUtility.extractHash(restrictedFact.getFactKey());
+                    doesNotKnowHashes.add(hash);
+                }
+            }
+            
+            // Output KNOWS
+            if (!knowsHashes.isEmpty()) {
+                sb.append("KNOWS (fact hashes):\n");
+                for (String hash : knowsHashes) {
+                    sb.append("  [").append(hash).append("]\n");
+                }
+            }
+            
+            // Output SUSPECTS
+            if (!suspectsHashes.isEmpty()) {
+                sb.append("SUSPECTS (fact hashes):\n");
+                for (String hash : suspectsHashes) {
+                    sb.append("  [").append(hash).append("]\n");
+                }
+            }
+            
+            // Output DOES NOT KNOW
+            if (!doesNotKnowHashes.isEmpty()) {
+                sb.append("DOES NOT KNOW (restricted fact hashes):\n");
+                for (String hash : doesNotKnowHashes) {
+                    sb.append("  [").append(hash).append("]\n");
+                }
+            }
+        }
+        
+        return sb.toString();
     }
     
     // === GETTERS AND SETTERS ===

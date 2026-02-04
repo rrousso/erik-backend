@@ -388,7 +388,19 @@ public class Stanza {
             sb.append("Current Exchange: ").append(this.currentExchange).append("\n\n");
         }
         
-        // 3. USER CHARACTER
+        // 3. FACT REGISTRY (must come before characters so narrator sees the full list)
+        String factRegistry = formatFactRegistryForNarrator();
+        if (!factRegistry.isEmpty()) {
+            sb.append(factRegistry);
+            sb.append("\n");
+        }
+
+        // Get restricted facts for character knowledge tracking
+        List<Fact> restrictedFacts = facts.stream()
+            .filter(Fact::isRestricted)
+            .collect(Collectors.toList());
+
+        // 4. USER CHARACTER
         StanzaCharacter userChar = getUserCharacter();
         if (userChar != null) {
             sb.append("=== USER CHARACTER ===\n\n");
@@ -405,7 +417,7 @@ public class Stanza {
             sb.append("\n");
         }
         
-        // 4. PRESENT CHARACTERS
+        // 5. PRESENT CHARACTERS
         List<StanzaCharacter> present = getPresentCharacters();
         if (!present.isEmpty()) {
             sb.append("=== CHARACTERS IN SCENE ===\n\n");
@@ -425,11 +437,12 @@ public class Stanza {
                 if (c.getGoals() != null && !(c.getGoals().length > 0)) {
                     sb.append("Goals: ").append(c.getGoals()).append("\n");
                 }
+                sb.append(c.toNarratorContext(restrictedFacts));
                 sb.append("\n---\n\n");
             }
         }
         
-        // 5. POTENTIAL CHARACTERS
+        // 6. POTENTIAL CHARACTERS
         List<StanzaCharacter> potential = getPotentialCharacters();
         if (!potential.isEmpty()) {
             sb.append("=== CHARACTERS WHO MIGHT APPEAR ===\n");
@@ -444,7 +457,7 @@ public class Stanza {
             sb.append("\n");
         }
         
-        // 6. ACTIVE TENSIONS
+        // 7. ACTIVE TENSIONS
         List<Tension> activeTensions = getActiveTensions();
         if (!activeTensions.isEmpty()) {
             sb.append("=== ACTIVE NARRATIVE TENSIONS ===\n\n");
@@ -458,7 +471,7 @@ public class Stanza {
             }
         }
         
-        // 7. WORLD CONTEXT
+        // 8. WORLD CONTEXT
         if (timeContext != null && !timeContext.isEmpty()) {
             sb.append("=== WORLD CONTEXT ===\n\n");
             sb.append("**When:** ").append(timeContext).append("\n\n");
@@ -472,6 +485,55 @@ public class Stanza {
             sb.append("**World Rules:**\n");
             for (String rule : worldRules) {
                 sb.append("- ").append(rule).append("\n");
+            }
+            sb.append("\n");
+        }
+        
+        return sb.toString();
+    }
+    
+    /**
+     * Format fact registry for narrator prompt.
+     * Shows all facts with their hashes so narrator can reference them.
+     * Separates RESTRICTED (need special reveal modes) from PUBLIC (observable).
+     */
+    private String formatFactRegistryForNarrator() {
+        StringBuilder sb = new StringBuilder();
+        
+        if (facts.isEmpty()) {
+            return "";
+        }
+        
+        sb.append("=== FACT REGISTRY ===\n\n");
+        
+        // Separate restricted from public
+        List<Fact> restrictedFacts = facts.stream()
+            .filter(Fact::isRestricted)
+            .collect(Collectors.toList());
+            
+        List<Fact> publicFacts = facts.stream()
+            .filter(f -> !f.isRestricted())
+            .collect(Collectors.toList());
+        
+        // Show restricted facts (these are critical for preventing info bleed)
+        if (!restrictedFacts.isEmpty()) {
+            sb.append("**RESTRICTED FACTS** (characters can only learn through specific means):\n");
+            for (Fact fact : restrictedFacts) {
+                String hash = com.github.rrousso.erik_core.util.FactUtility.extractHash(fact.getFactKey());
+                sb.append("  [").append(hash).append("] ")
+                  .append(fact.getPredicate())
+                  .append(" [reveal: ").append(fact.getAllowedRevealModes()).append("]\n");
+            }
+            sb.append("\n");
+        }
+        
+        // Show public facts (observable)
+        if (!publicFacts.isEmpty()) {
+            sb.append("**PUBLIC FACTS** (observable by anyone present):\n");
+            for (Fact fact : publicFacts) {
+                String hash = com.github.rrousso.erik_core.util.FactUtility.extractHash(fact.getFactKey());
+                sb.append("  [").append(hash).append("] ")
+                  .append(fact.getPredicate()).append("\n");
             }
             sb.append("\n");
         }

@@ -132,7 +132,10 @@ public class CharacterKnowledge {
     }
     
     /**
-     * Constructor for tracking awareness state (including UNAWARE/SUSPICIOUS).
+     * Constructor for tracking awareness state (including SUSPICIOUS).
+     * 
+     * NOTE: UNAWARE state should NOT be persisted - absence of record means UNAWARE.
+     * This constructor exists for SUSPICIOUS state only.
      */
     public CharacterKnowledge(StanzaCharacter character, Fact fact, String awarenessState, String how) {
         this.character = character;
@@ -144,10 +147,6 @@ public class CharacterKnowledge {
     // === CONVENIENCE METHODS ===
     
     // Awareness state checks
-    
-    public boolean isUnaware() {
-        return "UNAWARE".equals(awarenessState);
-    }
     
     public boolean isSuspicious() {
         return "SUSPICIOUS".equals(awarenessState);
