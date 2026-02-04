@@ -92,6 +92,7 @@ public class StanzaExtractionService {
             // 5. Apply each type of change using the registry
             // The registry handles the iteration and delegates to individual appliers
             applierRegistry.applyEvents(stanza, result.getEvents());
+            applierRegistry.applyFactEstablishments(stanza, result.getFacts());
             applierRegistry.applyKnowledgeTransfers(stanza, result.getKnowledgeTransfers());
             applierRegistry.applySecretRevelations(stanza, result.getSecretRevelations());
             applierRegistry.applyTensionChanges(stanza, result.getTensionChanges());

@@ -7,32 +7,28 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.github.rrousso.erik_core.dto.extraction.SecretRevelation;
-import com.github.rrousso.erik_core.persistence.entities.CharacterSecretState;
-import com.github.rrousso.erik_core.persistence.entities.Secret;
+import com.github.rrousso.erik_core.persistence.entities.CharacterKnowledge;
+import com.github.rrousso.erik_core.persistence.entities.Fact;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
 import com.github.rrousso.erik_core.persistence.entities.StanzaCharacter;
+import com.github.rrousso.erik_core.util.FactUtility;
 
 /**
  * Applier for secret revelation extractions.
  * 
- * Updates CharacterSecretState when characters learn or suspect secrets.
+ * Updates CharacterKnowledge awareness state when characters learn or suspect restricted facts.
+ * 
+ * NEW APPROACH (post-refactor):
+ * - No more Secret entity
+ * - No more CharacterSecretState entity
+ * - CharacterKnowledge.awarenessState tracks KNOWS/SUSPICIOUS
+ * - If no CharacterKnowledge exists, character is UNAWARE (implicit)
  * 
  * Process:
- * 1. Validate description and howRevealed lengths
- * 2. Find the character who learned/suspected the secret
- * 3. Find the Secret by matching fact predicate to secretDescription
- * 4. Find the CharacterSecretState for this character + secret
- * 5. Update the state based on newState from extraction:
- *    - KNOWS: Character now knows the secret (was UNAWARE or SUSPICIOUS)
- *    - SUSPICIOUS: Character suspects something (was UNAWARE)
- * 
- * Secret revelations represent characters learning hidden truths:
- * - "Stiles learned that Scott is a werewolf" → UNAWARE → KNOWS
- * - "Allison suspects her family are hunters" → UNAWARE → SUSPICIOUS
- * - "Derek confirmed the Alpha's identity" → SUSPICIOUS → KNOWS
- * 
- * The system tracks who knows what secrets to prevent information bleeding
- * between characters in the narrative.
+ * 1. Find the character
+ * 2. Find the fact (by hash or description matching)
+ * 3. Find or create CharacterKnowledge record
+ * 4. Update awarenessState to KNOWS or SUSPICIOUS
  */
 @Component
 public class SecretRevelationApplier implements ExtractionApplier<SecretRevelation> {
@@ -46,16 +42,15 @@ public class SecretRevelationApplier implements ExtractionApplier<SecretRevelati
     public void apply(Stanza stanza, SecretRevelation revelation) {
         // Validate lengths
         if (revelation.getSecretDescription() != null && revelation.getSecretDescription().length() > MAX_DESCRIPTION_LENGTH) {
-            log.warn("[SecretRevelationApplier] Secret description exceeds recommended {} characters: '{}'",
-                MAX_DESCRIPTION_LENGTH,
-                revelation.getSecretDescription().substring(0, Math.min(100, revelation.getSecretDescription().length())) + "...");
+            log.warn("[SecretRevelationApplier] Secret description exceeds recommended {} characters",
+                MAX_DESCRIPTION_LENGTH);
         }
         if (revelation.getHowRevealed() != null && revelation.getHowRevealed().length() > MAX_HOWREVEALED_LENGTH) {
-            log.warn("[SecretRevelationApplier] Secret 'howRevealed' exceeds recommended {} characters", 
+            log.warn("[SecretRevelationApplier] 'howRevealed' exceeds recommended {} characters", 
                 MAX_HOWREVEALED_LENGTH);
         }
         
-        // 1. Find the character by name
+        // 1. Find the character
         Optional<StanzaCharacter> charOpt = stanza.getCharacters().stream()
                 .filter(c -> c.getName().equalsIgnoreCase(revelation.getCharacterName()))
                 .findFirst();
@@ -68,58 +63,74 @@ public class SecretRevelationApplier implements ExtractionApplier<SecretRevelati
         
         StanzaCharacter character = charOpt.get();
         
-        // 2. Find the Secret by matching fact predicate to secretDescription
-        // The secret description from Gemini should match (or be similar to) the fact's predicate
-        Optional<Secret> secretOpt = 
-            stanza.getSecrets().stream()
-                .filter(s -> {
-                    String factPredicate = s.getFact().getPredicate();
-                    String secretDesc = revelation.getSecretDescription();
-                    
-                    // Try exact match first (case-insensitive)
-                    if (factPredicate.equalsIgnoreCase(secretDesc)) {
+        // 2. Find the fact
+        final Fact fact;
+        
+        // Try to find by hash first (preferred)
+        if (revelation.isHashReference()) {
+            Fact foundFact = stanza.getFacts().stream()
+                .filter(f -> FactUtility.matchesHash(f.getFactKey(), revelation.getSecretHash()))
+                .findFirst()
+                .orElse(null);
+                
+            if (foundFact == null) {
+                log.warn("[SecretRevelationApplier] Fact with hash '{}' not found - skipping", 
+                    revelation.getSecretHash());
+                return;
+            }
+            fact = foundFact;
+        } else {
+            // Fall back to matching by description (less reliable)
+            String secretDesc = revelation.getSecretDescription();
+            Fact foundFact = stanza.getFacts().stream()
+                .filter(f -> {
+                    String predicate = f.getPredicate();
+                    // Try exact match
+                    if (predicate.equalsIgnoreCase(secretDesc)) {
                         return true;
                     }
-                    
-                    // Try partial match (contains)
-                    if (factPredicate.toLowerCase().contains(secretDesc.toLowerCase()) ||
-                        secretDesc.toLowerCase().contains(factPredicate.toLowerCase())) {
-                        return true;
-                    }
-                    
-                    return false;
+                    // Try partial match
+                    return predicate.toLowerCase().contains(secretDesc.toLowerCase()) ||
+                           secretDesc.toLowerCase().contains(predicate.toLowerCase());
                 })
-                .findFirst();
-        
-        if (!secretOpt.isPresent()) {
-            log.warn("[SecretRevelationApplier] Secret matching '{}' not found in stanza - skipping", 
-                revelation.getSecretDescription());
-            return;
+                .findFirst()
+                .orElse(null);
+                
+            if (foundFact == null) {
+                log.warn("[SecretRevelationApplier] Fact matching '{}' not found - skipping", 
+                    secretDesc);
+                return;
+            }
+            fact = foundFact;
         }
         
-        Secret secret = secretOpt.get();
+        // 3. Find or create CharacterKnowledge record
+        // Compare by hash (not ID) since new facts don't have IDs yet
+        final String factHash = FactUtility.extractHash(fact.getFactKey());
+        CharacterKnowledge knowledge = character.getKnownFacts().stream()
+            .filter(k -> {
+                String knownFactHash = FactUtility.extractHash(k.getFact().getFactKey());
+                return factHash != null && factHash.equals(knownFactHash);
+            })
+            .findFirst()
+            .orElse(null);
         
-        // 3. Find the CharacterSecretState for this character + secret
-        Optional<CharacterSecretState> stateOpt = 
-            character.getSecretStates().stream()
-                .filter(css -> css.getSecret().getId().equals(secret.getId()))
-                .findFirst();
+        String oldState = knowledge != null ? knowledge.getAwarenessState() : "UNAWARE";
         
-        if (!stateOpt.isPresent()) {
-            log.warn("[SecretRevelationApplier] No CharacterSecretState found for {} and secret '{}' - skipping", 
-                character.getName(), secret.getFact().getPredicate());
-            return;
+        if (knowledge == null) {
+            // Character didn't have a knowledge record - create one
+            knowledge = new CharacterKnowledge();
+            knowledge.setCharacter(character);
+            knowledge.setFact(fact);
+            knowledge.setStatus("LEARNED");
+            character.getKnownFacts().add(knowledge);
         }
         
-        CharacterSecretState secretState = stateOpt.get();
-        
-        // 4. Update the state based on newState from extraction
-        String oldState = secretState.getState();
+        // 4. Update awareness state
         String newState = revelation.getNewState();
         
         if ("KNOWS".equalsIgnoreCase(newState)) {
-            // Use the convenience method
-            secretState.unlock(
+            knowledge.unlock(
                 revelation.getHowRevealed(), 
                 stanza.getCurrentBeatNumber(), 
                 stanza.getCurrentExchange()
@@ -127,12 +138,11 @@ public class SecretRevelationApplier implements ExtractionApplier<SecretRevelati
             
             log.info("[SecretRevelationApplier] Secret revealed: {} now KNOWS '{}' (was: {})", 
                 character.getName(), 
-                secret.getFact().getPredicate(), 
+                fact.getPredicate(), 
                 oldState);
             
         } else if ("SUSPICIOUS".equalsIgnoreCase(newState)) {
-            // Use the convenience method
-            secretState.makeSuspicious(
+            knowledge.makeSuspicious(
                 revelation.getHowRevealed(), 
                 stanza.getCurrentBeatNumber(), 
                 stanza.getCurrentExchange()
@@ -140,15 +150,15 @@ public class SecretRevelationApplier implements ExtractionApplier<SecretRevelati
             
             log.info("[SecretRevelationApplier] Secret hinted: {} is now SUSPICIOUS about '{}' (was: {})", 
                 character.getName(), 
-                secret.getFact().getPredicate(), 
+                fact.getPredicate(), 
                 oldState);
             
         } else {
-            log.warn("[SecretRevelationApplier] Unknown secret state '{}' - expected KNOWS or SUSPICIOUS", newState);
+            log.warn("[SecretRevelationApplier] Unknown state '{}' - expected KNOWS or SUSPICIOUS", newState);
             return;
         }
         
-        log.debug("[SecretRevelationApplier] Updated secret state for {}: {} → {}", 
+        log.debug("[SecretRevelationApplier] Updated awareness for {}: {} → {}", 
             character.getName(), oldState, newState);
     }
     

@@ -1,6 +1,5 @@
 package com.github.rrousso.erik_core.services.stanza;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,15 +12,14 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.rrousso.erik_core.dto.initialization.BackgroundCharacter;
+import com.github.rrousso.erik_core.dto.initialization.InitFact;
 import com.github.rrousso.erik_core.dto.initialization.InitializedStanza;
 import com.github.rrousso.erik_core.dto.initialization.NarrativeTension;
 import com.github.rrousso.erik_core.dto.initialization.UserCharacter;
 import com.github.rrousso.erik_core.dto.initialization.WorldContext;
 import com.github.rrousso.erik_core.persistence.entities.CharacterKnowledge;
-import com.github.rrousso.erik_core.persistence.entities.CharacterSecretState;
 import com.github.rrousso.erik_core.persistence.entities.Fact;
 import com.github.rrousso.erik_core.persistence.entities.Persona;
-import com.github.rrousso.erik_core.persistence.entities.Secret;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
 import com.github.rrousso.erik_core.persistence.entities.StanzaCharacter;
 import com.github.rrousso.erik_core.persistence.entities.Tension;
@@ -83,7 +81,7 @@ public class StanzaPersistenceService {
         stanza.getCharacters().add(userChar);
         
         // 3. Create user's private facts + secrets
-        createUserPrivateFacts(stanza, initialized);
+        createFactsFromInitialization(stanza, initialized);
         
         // 4. Create explicit characters
         for (var charData : initialized.getExplicitCharacters()) {
@@ -122,7 +120,6 @@ public class StanzaPersistenceService {
         log.info("[Persistence] Characters: {}, Facts: {}, Secrets: {}, Tensions: {}", 
             saved.getCharacters().size(),
             saved.getFacts().size(),
-            saved.getSecrets().size(),
             saved.getTensions().size());
         
         return saved;
@@ -268,84 +265,74 @@ public class StanzaPersistenceService {
     // ========== FACT/SECRET CREATION ==========
     
     /**
-     * Create facts and secrets for user's private information.
+     * Create facts from the initialization facts list.
+     * All facts are created from the structured list provided by the LLM.
+     */
+    private void createFactsFromInitialization(Stanza stanza, InitializedStanza initialized) {
+        log.info("[Persistence] Creating {} facts from initialization", initialized.getFacts().size());
+        
+        for (InitFact initFact : initialized.getFacts()) {
+            String factKey = FactUtility.generateFactKey(initFact.getStatement());
+            
+            // Check if already exists (shouldn't happen but be safe)
+            if (factsByKey.containsKey(factKey)) {
+                log.warn("[Persistence] Duplicate fact key during init: {}", factKey);
+                continue;
+            }
+            
+            // Create fact with statement in predicate, truth value in factValue
+            Fact fact = new Fact();
+            fact.setStanza(stanza);
+            fact.setFactKey(factKey);
+            fact.setPredicate(initFact.getStatement());
+            fact.setFactValue(initFact.getTruthValue() != null ? initFact.getTruthValue().toString() : "true");
+            fact.setKind(determineFactKind(initFact));
+            fact.setSource("ARCHITECT_INIT");
+            fact.setCreatedBeat(0);
+            fact.setCreatedExchange(0);
+            
+            // Set discovery rules if restricted
+            if (initFact.isRestricted()) {
+                fact.setAllowedRevealModes(initFact.getAllowedRevealModes());
+            }
+            
+            stanza.getFacts().add(fact);
+            factsByKey.put(factKey, fact);
+            
+            // Also track by tempId for linking characters
+            factsByKey.put(initFact.getTempId(), fact);
+            
+            log.debug("[Persistence] Created fact [{}]: {} (restricted: {})", 
+                factKey, 
+                initFact.getStatement(), 
+                initFact.isRestricted());
+        }
+    }
+    
+    /**
+     * Determine fact kind based on content.
+     * Can be enhanced with smarter logic later.
+     */
+    private String determineFactKind(InitFact initFact) {
+        // For now, if it's restricted, it's likely private
+        // If public, it's world knowledge
+        return initFact.isRestricted() ? "PRIVATE" : "WORLD";
+    }
+    
+    
+    /**
+     * Link character knowledge after all facts exist.
      * 
-     * User's privateBackstory becomes USER_PRIVATE facts with secrets.
-     * Items in character's doesNotKnow lists that reference user become secrets.
-     */
-    private void createUserPrivateFacts(Stanza stanza, InitializedStanza initialized) {
-        UserCharacter user = initialized.getUserCharacter();
-        if (user == null) return;
-        
-        // Create facts from user's knownFacts (these are public, user knows them)
-        for (String factText : user.getKnownFacts()) {
-            String factKey = FactUtility.generateFactKey(factText);
-            createFact(stanza, factKey, "USER_PUBLIC", "user", null, "knows", factText, "USER_SAID");
-        }
-        
-        // Private backstory becomes a single large fact (or could be split)
-        if (user.getPrivateBackstory() != null && !user.getPrivateBackstory().isEmpty()) {
-            String factKey = "user_private_backstory";
-            Fact backstoryFact = createFact(stanza, factKey, "USER_PRIVATE", "user", null, 
-                "has_backstory", user.getPrivateBackstory(), "USER_SAID");
-            
-            // Create a secret for the backstory
-            createSecret(stanza, backstoryFact, false, "TOLD,OBSERVED");
-        }
-        
-        // Scan all characters' doesNotKnow lists for user-related secrets
-        List<String> userSecrets = collectUserSecrets(initialized);
-        for (String secretText : userSecrets) {
-            String factKey = FactUtility.generateFactKey(secretText);
-            
-            // Check if fact already exists
-            if (!factsByKey.containsKey(factKey)) {
-                Fact fact = createFact(stanza, factKey, "USER_PRIVATE", "user", null, 
-                    "secret", secretText, "ARCHITECT_DERIVED");
-                
-                // Determine if inferable based on content
-                boolean inferable = isLikelyInferable(secretText);
-                String revealModes = inferable ? "TOLD,OBSERVED,INFERRED,SENSED_SPECIAL" : "TOLD,OBSERVED";
-                createSecret(stanza, fact, inferable, revealModes);
-            }
-        }
-    }
-    
-    /**
-     * Collect all unique "doesNotKnow" items that reference the user
-     */
-    private List<String> collectUserSecrets(InitializedStanza initialized) {
-        List<String> secrets = new ArrayList<>();
-        
-        for (var charData : initialized.getExplicitCharacters()) {
-            for (String item : charData.getDoesNotKnow()) {
-                if (!secrets.contains(item)) {
-                    secrets.add(item);
-                }
-            }
-        }
-        
-        for (var charData : initialized.getLikelyCharacters()) {
-            for (String item : charData.getDoesNotKnow()) {
-                if (!secrets.contains(item)) {
-                    secrets.add(item);
-                }
-            }
-        }
-        
-        return secrets;
-    }
-    
-    /**
-     * Link character knowledge after all chars and facts exist
+     * NEW LOGIC:
+     * - Only create CharacterKnowledge for facts the character KNOWS
+     * - If no record exists, character is assumed UNAWARE (handled by prompt builder)
      */
     private void linkCharacterKnowledge(Stanza stanza, InitializedStanza initialized) {
         // Process explicit characters
         for (var charData : initialized.getExplicitCharacters()) {
             StanzaCharacter character = findCharacterByName(stanza, charData.getName());
             if (character != null) {
-                linkKnowledgeForCharacter(stanza, character, charData.getCurrentKnowledge());
-                linkSecretStatesForCharacter(stanza, character, charData.getDoesNotKnow());
+                linkKnowledgeForCharacter(stanza, character, charData.getKnows());
             }
         }
         
@@ -353,110 +340,43 @@ public class StanzaPersistenceService {
         for (var charData : initialized.getLikelyCharacters()) {
             StanzaCharacter character = findCharacterByName(stanza, charData.getName());
             if (character != null) {
-                linkKnowledgeForCharacter(stanza, character, charData.getCurrentKnowledge());
-                linkSecretStatesForCharacter(stanza, character, charData.getDoesNotKnow());
+                linkKnowledgeForCharacter(stanza, character, charData.getKnows());
             }
         }
     }
-    
     /**
-     * Create CharacterKnowledge records for facts the character knows
+     * Create CharacterKnowledge records for fact tempIds the character knows.
      */
-    private void linkKnowledgeForCharacter(Stanza stanza, StanzaCharacter character, List<String> knowledgeItems) {
-        for (String item : knowledgeItems) {
-            // Create or find fact for this knowledge
-            String factKey = FactUtility.generateFactKey(item);
-            Fact fact = factsByKey.get(factKey);
+    private void linkKnowledgeForCharacter(Stanza stanza, StanzaCharacter character, List<String> factTempIds) {
+        for (String tempId : factTempIds) {
+            // Find fact by tempId
+            Fact fact = factsByKey.get(tempId);
             
             if (fact == null) {
-                // Create new fact (this is something the character knows but isn't a user secret)
-                fact = createFact(stanza, factKey, "WORLD", "world", null, "truth", item, "DOCUMENTED");
+                log.warn("[Persistence] Fact with tempId '{}' not found for character '{}'", 
+                    tempId, character.getName());
+                continue;
             }
             
-            // Create knowledge link
-            CharacterKnowledge knowledge = new CharacterKnowledge(character, fact, "DOCUMENTED");
+            // Create knowledge link with KNOWS state
+            CharacterKnowledge knowledge = new CharacterKnowledge();
+            knowledge.setCharacter(character);
+            knowledge.setFact(fact);
+            knowledge.setAwarenessState("KNOWS");
+            knowledge.setHow("DOCUMENTED");  // Known at init = documented
             knowledge.setStatus("LEARNED");
             knowledge.setLearnedBeat(0);
             knowledge.setLearnedExchange(0);
-            character.getKnownFacts().add(knowledge);
-        }
-    }
-    
-    /**
-     * Create CharacterSecretState records for secrets the character doesn't know about
-     */
-    private void linkSecretStatesForCharacter(Stanza stanza, StanzaCharacter character, List<String> doesNotKnow) {
-        for (String item : doesNotKnow) {
-            // Find the secret that locks this fact
-            String factKey = FactUtility.generateFactKey(item);
-            Fact fact = factsByKey.get(factKey);
             
-            if (fact != null) {
-                // Find secret for this fact
-                Secret secret = findSecretForFact(stanza, fact);
-                if (secret != null) {
-                    // Create secret state - character is UNAWARE
-                    CharacterSecretState state = new CharacterSecretState();
-                    state.setCharacter(character);
-                    state.setSecret(secret);
-                    state.setState("UNAWARE");
-                    character.getSecretStates().add(state);
-                }
-            }
+            character.getKnownFacts().add(knowledge);
+            
+            log.debug("[Persistence] Character '{}' knows fact [{}]", 
+                character.getName(), 
+                FactUtility.extractHash(fact.getFactKey()));
         }
     }
     
     // ========== HELPER METHODS ==========
-    
-    /**
-     * Create a fact and track it
-     */
-    private Fact createFact(Stanza stanza, String factKey, String kind, 
-            String subjectType, String subjectId, String predicate, 
-            String value, String source) {
-        
-        // Check if already exists
-        if (factsByKey.containsKey(factKey)) {
-            return factsByKey.get(factKey);
-        }
-        // Truncate fields to prevent database constraint violations
-        String truncatedPredicate = FactUtility.truncatePredicate(predicate, "createFact: " + factKey);
-        String truncatedSubjectId = FactUtility.truncateSubjectId(subjectId, "createFact: " + factKey);
-        
-        Fact fact = new Fact(stanza, factKey, kind, truncatedPredicate);
-        fact.setSubjectType(subjectType);
-        fact.setSubjectId(truncatedSubjectId);
-        fact.setFactValue(wrapAsJson(value));
-        fact.setPredicate(truncatedPredicate);
-        fact.setSource(source);
-        fact.setCreatedBeat(0);
-        fact.setCreatedExchange(0);
-        
-        stanza.getFacts().add(fact);
-        factsByKey.put(factKey, fact);
-        
-        return fact;
-    }
-    
-    /**
-     * Create a secret for a fact
-     */
-    private Secret createSecret(Stanza stanza, Fact fact, boolean inferable, String allowedModes) {
-        Secret secret = new Secret(stanza, fact, inferable, allowedModes);
-        stanza.getSecrets().add(secret);
-        return secret;
-    }
-    
-    /**
-     * Wrap a value as simple JSON string
-     */
-    private String wrapAsJson(String value) {
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
-            return "\"" + value.replace("\"", "\\\"") + "\"";
-        }
-    }
     
     /**
      * Find a character by name in the stanza
@@ -468,41 +388,6 @@ public class StanzaPersistenceService {
             .orElse(null);
     }
     
-    /**
-     * Find the secret that locks a fact
-     */
-    private Secret findSecretForFact(Stanza stanza, Fact fact) {
-        return stanza.getSecrets().stream()
-            .filter(s -> s.getFact().getFactKey().equals(fact.getFactKey()))
-            .findFirst()
-            .orElse(null);
-    }
-    
-    /**
-     * Determine if a secret is likely inferable from other facts
-     */
-    private boolean isLikelyInferable(String secretText) {
-        String lower = secretText.toLowerCase();
-        
-        // Things that are typically NOT inferable (must be told/observed)
-        if (lower.contains("trans") || 
-            lower.contains("secret") ||
-            lower.contains("hidden") ||
-            lower.contains("trauma") ||
-            lower.contains("family history")) {
-            return false;
-        }
-        
-        // Things that might be inferable from behavior
-        if (lower.contains("supernatural") ||
-            lower.contains("magic") ||
-            lower.contains("powers") ||
-            lower.contains("spark")) {
-            return true;
-        }
-        
-        return false;  // Default to not inferable
-    }
     
     /**
      * Truncate string to max length
@@ -561,14 +446,12 @@ public class StanzaPersistenceService {
         stanza.getCharacters().size();
         stanza.getTensions().size();
         stanza.getFacts().size();
-        stanza.getSecrets().size();
         stanza.getBeats().size(); 
         stanza.getEvents().size();
         
         // Also initialize nested collections on characters
         for (StanzaCharacter character : stanza.getCharacters()) {
             character.getKnownFacts().size();
-            character.getSecretStates().size();
         }
         
         return stanza;

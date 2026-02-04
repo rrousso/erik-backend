@@ -20,6 +20,7 @@ import java.util.List;
 public class ExtractionResult {
     
     private List<EventExtraction> events = new ArrayList<>();
+    private List<FactEstablishment> facts = new ArrayList<>();
     private List<KnowledgeTransfer> knowledgeTransfers = new ArrayList<>();
     private List<SecretRevelation> secretRevelations = new ArrayList<>();
     private List<TensionChange> tensionChanges = new ArrayList<>();
@@ -37,6 +38,14 @@ public class ExtractionResult {
     
     public void setEvents(List<EventExtraction> events) {
         this.events = events != null ? events : new ArrayList<>();
+    }
+    
+    public List<FactEstablishment> getFacts() {
+        return facts;
+    }
+    
+    public void setFacts(List<FactEstablishment> facts) {
+        this.facts = facts != null ? facts : new ArrayList<>();
     }
     
     public List<KnowledgeTransfer> getKnowledgeTransfers() {
@@ -77,7 +86,8 @@ public class ExtractionResult {
      * Check if any changes were extracted
      */
     public boolean hasAnyChanges() {
-        return !events.isEmpty() 
+        return !events.isEmpty()
+            || !facts.isEmpty()  // NEW
             || !knowledgeTransfers.isEmpty() 
             || !secretRevelations.isEmpty()
             || !tensionChanges.isEmpty()
@@ -88,7 +98,8 @@ public class ExtractionResult {
      * Get total count of all changes
      */
     public int getTotalChangeCount() {
-        return events.size() 
+        return events.size()
+            + facts.size()  // NEW
             + knowledgeTransfers.size() 
             + secretRevelations.size()
             + tensionChanges.size()
@@ -97,8 +108,9 @@ public class ExtractionResult {
     
     @Override
     public String toString() {
-        return String.format("ExtractionResult[events=%d, knowledge=%d, secrets=%d, tensions=%d, appearances=%d]",
-            events.size(), knowledgeTransfers.size(), secretRevelations.size(), 
+        return String.format("ExtractionResult[events=%d, facts=%d, knowledge=%d, secrets=%d, tensions=%d, appearances=%d]",
+            events.size(), facts.size(), knowledgeTransfers.size(), secretRevelations.size(), 
             tensionChanges.size(), characterAppearances.size());
     }
+    
 }

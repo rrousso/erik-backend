@@ -87,11 +87,6 @@ public class StanzaInitializationServiceTest {
     @DisplayName("Should include loaded stanza context when continuing a story")
     void shouldIncludeLoadedStanzaInPlanning() throws Exception {
         // Given
-        when(mockLoadedStanza.getWorldIdentifier()).thenReturn("teen_wolf");
-        when(mockLoadedStanza.getSetting()).thenReturn("Beacon Hills High");
-        when(mockLoadedStanza.getPremise()).thenReturn("New werewolf in town");
-        when(mockLoadedStanza.getTone()).thenReturn("Supernatural drama");
-        
         String mockPrompt = "Initialize stanza...";
         String mockJsonResponse = createMockJsonResponse();
         
@@ -143,16 +138,26 @@ public class StanzaInitializationServiceTest {
         InitializedStanza result = service.initializeFromPlanning(planningHistory, null);
         
         // Then
+        // Verify facts were parsed
+        assertNotNull(result.getFacts());
+        assertEquals(9, result.getFacts().size());
+        
+        // Verify Scott McCall knows specific facts by tempId
         StanzaCharacter scottMcCall = result.getExplicitCharacters().stream()
             .filter(c -> c.getName().equals("Scott McCall"))
             .findFirst()
             .orElse(null);
         
         assertNotNull(scottMcCall);
-        assertEquals(2, scottMcCall.getCurrentKnowledge().size());
-        assertTrue(scottMcCall.getCurrentKnowledge().contains("User is a new student"));
-        assertEquals(1, scottMcCall.getDoesNotKnow().size());
-        assertTrue(scottMcCall.getDoesNotKnow().contains("User's supernatural status"));
+        assertEquals(2, scottMcCall.getKnows().size());
+        assertTrue(scottMcCall.getKnows().contains("fact_1"));
+        assertTrue(scottMcCall.getKnows().contains("fact_2"));
+        
+        // Verify restricted facts exist
+        long restrictedFactCount = result.getFacts().stream()
+            .filter(f -> f.getAllowedRevealModes() != null && !f.getAllowedRevealModes().isEmpty())
+            .count();
+        assertEquals(3, restrictedFactCount); // fact_3, fact_6, fact_7
     }
     
     @Test
@@ -398,10 +403,69 @@ public class StanzaInitializationServiceTest {
     /**
      * Create a mock JSON response for a typical Teen Wolf stanza initialization
      */
+    /**
+     * Create a mock JSON response for a typical Teen Wolf stanza initialization
+     */
     private String createMockJsonResponse() {
         return """
             {
               "worldIdentifier": "teen_wolf",
+              "facts": [
+                {
+                  "tempId": "fact_1",
+                  "statement": "User is a new student",
+                  "truthValue": true,
+                  "allowedRevealModes": null
+                },
+                {
+                  "tempId": "fact_2",
+                  "statement": "User seems friendly",
+                  "truthValue": true,
+                  "allowedRevealModes": null
+                },
+                {
+                  "tempId": "fact_3",
+                  "statement": "User's supernatural status",
+                  "truthValue": true,
+                  "allowedRevealModes": "TOLD,OBSERVED,SENSED_SPECIAL"
+                },
+                {
+                  "tempId": "fact_4",
+                  "statement": "User is new",
+                  "truthValue": true,
+                  "allowedRevealModes": null
+                },
+                {
+                  "tempId": "fact_5",
+                  "statement": "User enrolled today",
+                  "truthValue": true,
+                  "allowedRevealModes": null
+                },
+                {
+                  "tempId": "fact_6",
+                  "statement": "User's background",
+                  "truthValue": true,
+                  "allowedRevealModes": "TOLD"
+                },
+                {
+                  "tempId": "fact_7",
+                  "statement": "Why user moved here",
+                  "truthValue": true,
+                  "allowedRevealModes": "TOLD"
+                },
+                {
+                  "tempId": "fact_8",
+                  "statement": "New student enrolled",
+                  "truthValue": true,
+                  "allowedRevealModes": null
+                },
+                {
+                  "tempId": "fact_9",
+                  "statement": "User's name",
+                  "truthValue": true,
+                  "allowedRevealModes": null
+                }
+              ],
               "userCharacter": {
                 "publicRole": "New student at Beacon Hills High School",
                 "privateBackstory": "Recently moved to Beacon Hills, unaware of supernatural happenings",
@@ -415,8 +479,7 @@ public class StanzaInitializationServiceTest {
                   "name": "Scott McCall",
                   "canonRole": "True Alpha werewolf, leader of the pack",
                   "presentInFirstScene": true,
-                  "currentKnowledge": ["User is a new student", "User seems friendly"],
-                  "doesNotKnow": ["User's supernatural status"],
+                  "knows": ["fact_1", "fact_2"],
                   "currentEmotionalState": "Welcoming but cautious",
                   "currentMotivations": ["Protect the pack", "Keep supernatural secret"],
                   "relationshipToUser": "Just met",
@@ -426,8 +489,7 @@ public class StanzaInitializationServiceTest {
                   "name": "Stiles Stilinski",
                   "canonRole": "Scott's best friend, human with supernatural knowledge",
                   "presentInFirstScene": true,
-                  "currentKnowledge": ["User is new", "User enrolled today"],
-                  "doesNotKnow": ["User's background", "Why user moved here"],
+                  "knows": ["fact_4", "fact_5"],
                   "currentEmotionalState": "Curious and talkative",
                   "currentMotivations": ["Help Scott", "Investigate newcomers"],
                   "relationshipToUser": "Just met",
@@ -439,8 +501,7 @@ public class StanzaInitializationServiceTest {
                   "name": "Lydia Martin",
                   "canonRole": "Banshee, popular student",
                   "presentInFirstScene": false,
-                  "currentKnowledge": ["New student enrolled"],
-                  "doesNotKnow": ["User's name", "User's background"],
+                  "knows": ["fact_8"],
                   "currentEmotionalState": "Indifferent",
                   "currentMotivations": ["Maintain social status"],
                   "relationshipToUser": "Unaware of user",

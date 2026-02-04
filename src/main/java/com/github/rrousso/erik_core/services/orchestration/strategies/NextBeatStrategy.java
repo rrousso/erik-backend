@@ -54,6 +54,10 @@ public class NextBeatStrategy implements FlowStrategy {
             log.error("[NextBeat] State error: {}", e.getMessage());
             return "[System] Error: " + e.getMessage() + "\n";
             
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            log.error("[NextBeat] Database constraint violation", e);
+            return "[System] Database error: Beat may already exist. Please report this issue.\n";
+            
         } catch (Exception e) {
             log.error("[NextBeat] Failed to transition beats", e);
             return "[System] Error transitioning beats. Please try again.\n";

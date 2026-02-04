@@ -73,9 +73,6 @@ public class StanzaCharacter {
     @OneToMany(mappedBy = "character", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CharacterKnowledge> knownFacts = new ArrayList<>();
     
-    @OneToMany(mappedBy = "character", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<CharacterSecretState> secretStates = new ArrayList<>();
-    
     // === TIMESTAMPS ===
     @CreationTimestamp
     @Column(updatable = false)
@@ -123,23 +120,38 @@ public class StanzaCharacter {
     }
     
     /**
-     * Check if character has access to a secret (can learn the locked fact)
+     * Check if character knows a fact (awareness state = KNOWS).
+     * This is stricter than knowsFact - only returns true if they actually KNOW it.
      */
-    public boolean hasSecretAccess(Secret secret) {
-        return secretStates.stream()
-            .anyMatch(s -> s.getSecret().getId().equals(secret.getId()) 
-                       && "knows".equals(s.getState()));
+    public boolean actuallyKnowsFact(Fact fact) {
+        return knownFacts.stream()
+            .anyMatch(k -> k.getFact().getId().equals(fact.getId()) && k.knows());
     }
     
     /**
-     * Get secret state for a specific secret
+     * Check if character is unaware of a fact.
      */
-    public String getSecretState(Secret secret) {
-        return secretStates.stream()
-            .filter(s -> s.getSecret().getId().equals(secret.getId()))
-            .map(CharacterSecretState::getState)
+    public boolean isUnawareOfFact(Fact fact) {
+        return knownFacts.stream()
+            .anyMatch(k -> k.getFact().getId().equals(fact.getId()) && k.isUnaware());
+    }
+    
+    /**
+     * Check if character is suspicious about a fact.
+     */
+    public boolean isSuspiciousOfFact(Fact fact) {
+        return knownFacts.stream()
+            .anyMatch(k -> k.getFact().getId().equals(fact.getId()) && k.isSuspicious());
+    }
+    
+    /**
+     * Get the knowledge state for a specific fact (if tracked).
+     */
+    public CharacterKnowledge getKnowledgeStateFor(Fact fact) {
+        return knownFacts.stream()
+            .filter(k -> k.getFact().getId().equals(fact.getId()))
             .findFirst()
-            .orElse("unaware");
+            .orElse(null);
     }
     
     // === GETTERS AND SETTERS ===
@@ -262,14 +274,6 @@ public class StanzaCharacter {
     
     public void setKnownFacts(List<CharacterKnowledge> knownFacts) {
         this.knownFacts = knownFacts;
-    }
-    
-    public List<CharacterSecretState> getSecretStates() {
-        return secretStates;
-    }
-    
-    public void setSecretStates(List<CharacterSecretState> secretStates) {
-        this.secretStates = secretStates;
     }
     
     public LocalDateTime getCreatedAt() {

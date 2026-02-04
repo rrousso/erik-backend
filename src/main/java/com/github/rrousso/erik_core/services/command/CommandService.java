@@ -7,7 +7,6 @@ import org.springframework.stereotype.Service;
 import com.github.rrousso.erik_core.domain.models.SessionState;
 import com.github.rrousso.erik_core.domain.valueobjects.CommandResult;
 import com.github.rrousso.erik_core.persistence.entities.CharacterKnowledge;
-import com.github.rrousso.erik_core.persistence.entities.CharacterSecretState;
 import com.github.rrousso.erik_core.persistence.entities.Fact;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
 import com.github.rrousso.erik_core.persistence.entities.StanzaCharacter;
@@ -302,42 +301,35 @@ public class CommandService {
                 }
                 sb.append(" [").append(character.getPresenceStatus()).append("]\n");
                 
-                // What they know
-                if (!character.getKnownFacts().isEmpty()) {
-                    sb.append("    Knows (").append(character.getKnownFacts().size()).append(" facts):\n");
-                    for (CharacterKnowledge ck : character.getKnownFacts()) {
+                // Separate knowledge by awareness state
+                List<CharacterKnowledge> knownFacts = character.getKnownFacts().stream()
+                    .filter(ck -> "KNOWS".equals(ck.getAwarenessState()))
+                    .collect(Collectors.toList());
+                
+                List<CharacterKnowledge> suspectedFacts = character.getKnownFacts().stream()
+                    .filter(ck -> "SUSPICIOUS".equals(ck.getAwarenessState()))
+                    .collect(Collectors.toList());
+                
+                // Display what they know
+                if (!knownFacts.isEmpty()) {
+                    sb.append("    KNOWS (").append(knownFacts.size()).append(" facts):\n");
+                    for (CharacterKnowledge ck : knownFacts) {
+                        String hash = FactUtility.extractHash(ck.getFact().getFactKey());
+                        String restricted = ck.getFact().isRestricted() ? " [RESTRICTED]" : "";
+                        sb.append("      [").append(hash).append("] ")
+                          .append(ck.getFact().getPredicate())
+                          .append(" (").append(ck.getHow()).append(")").append(restricted).append("\n");
+                    }
+                }
+                
+                // Display what they suspect
+                if (!suspectedFacts.isEmpty()) {
+                    sb.append("    SUSPICIOUS (").append(suspectedFacts.size()).append(" facts):\n");
+                    for (CharacterKnowledge ck : suspectedFacts) {
                         String hash = FactUtility.extractHash(ck.getFact().getFactKey());
                         sb.append("      [").append(hash).append("] ")
                           .append(ck.getFact().getPredicate())
                           .append(" (").append(ck.getHow()).append(")\n");
-                    }
-                }
-                
-                // Secrets they don't know
-                List<CharacterSecretState> unknownSecrets = character.getSecretStates().stream()
-                    .filter(css -> "UNAWARE".equals(css.getState()))
-                    .collect(Collectors.toList());
-                
-                if (!unknownSecrets.isEmpty()) {
-                    sb.append("    Does NOT know (").append(unknownSecrets.size()).append(" secrets):\n");
-                    for (CharacterSecretState css : unknownSecrets) {
-                        String hash = FactUtility.extractHash(css.getSecret().getFact().getFactKey());
-                        sb.append("      [").append(hash).append("] SECRET: ")
-                          .append(css.getSecret().getFact().getPredicate()).append("\n");
-                    }
-                }
-                
-                // Secrets they suspect
-                List<CharacterSecretState> suspectedSecrets = character.getSecretStates().stream()
-                    .filter(css -> "SUSPICIOUS".equals(css.getState()))
-                    .collect(Collectors.toList());
-                
-                if (!suspectedSecrets.isEmpty()) {
-                    sb.append("    Suspects (").append(suspectedSecrets.size()).append(" secrets):\n");
-                    for (CharacterSecretState css : suspectedSecrets) {
-                        String hash = FactUtility.extractHash(css.getSecret().getFact().getFactKey());
-                        sb.append("      [").append(hash).append("] SECRET: ")
-                          .append(css.getSecret().getFact().getPredicate()).append("\n");
                     }
                 }
                 

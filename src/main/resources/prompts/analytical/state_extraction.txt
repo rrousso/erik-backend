@@ -57,6 +57,40 @@ EXTRACTION TASK
 
 Analyze the narrator's response and extract the following types of changes. Only include changes that are CLEARLY stated or shown in the narration. Do not infer things that might have happened.
 
+0. FACTS (New in the world)
+   New truths established during this exchange that exist but may not be known by characters yet.
+   
+   When to create facts:
+   - Something new is CREATED with lasting existence (objects, items, abilities)
+   - Hidden information is ESTABLISHED but not revealed (box contents, secret passages, locked doors)
+   - Character abilities/states change PERMANENTLY (gained power, lost ability, transformed)
+   - Important plot-relevant information emerges (identity reveals, relationship changes)
+   
+   When NOT to create facts:
+   - Trivial scene details (wall color, furniture placement)
+   - Temporary states (character is standing, weather, time of day)
+   - Character emotions or momentary reactions
+   - Information already in the fact registry
+   - Actions or movements (walked to window, opened door)
+   
+   allowedRevealModes:
+   - null or empty = publicly observable, anyone can see it
+   - "OBSERVED" = must directly observe (open box, look inside, examine closely)
+   - "TOLD" = must be told by someone who knows
+   - "TOLD,OBSERVED" = can learn either way
+   - "TOLD,OBSERVED,INFERRED" = multiple valid ways to learn
+   - "SENSED_SPECIAL" = requires special senses (magic, supernatural abilities)
+   
+   Examples:
+   ✓ User creates a gift box → fact: "The gift box contains a squeaky mouse that smells like cooked meat" (allowedRevealModes: "OBSERVED")
+   ✓ Character permanently gains ability → fact: "Malik can speak human language" (allowedRevealModes: "OBSERVED")
+   ✓ Hidden object created → fact: "A secret door exists behind the bookshelf" (allowedRevealModes: "OBSERVED")
+   ✓ Character transformation → fact: "User is now a werewolf" (allowedRevealModes: "OBSERVED,SENSED_SPECIAL")
+   ✗ Time passes / becomes nighttime (temporary scene detail)
+   ✗ Character walks to window (momentary action)
+   ✗ Room feels warm (ephemeral atmosphere)
+   ✗ Character seems nervous (temporary emotion)
+   
 1. EVENTS
    What significant things happened in this exchange?
    - Focus on: actions taken, discoveries made, conflicts that occurred, arrivals/departures
@@ -108,6 +142,13 @@ Respond ONLY with valid JSON in this exact structure. Do not include markdown co
       "description": "brief description of what happened",
       "significance": "MAJOR" | "MINOR" | "DETAIL",
       "charactersInvolved": ["character name", "another name"]
+    }
+  ],
+  "facts": [
+    {
+      "statement": "The gift box contains a squeaky mouse that smells like cooked meat",
+      "truthValue": true,
+      "allowedRevealModes": "OBSERVED"
     }
   ],
   "knowledgeTransfers": [

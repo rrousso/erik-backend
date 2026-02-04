@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import com.github.rrousso.erik_core.dto.extraction.CharacterAppearance;
 import com.github.rrousso.erik_core.dto.extraction.EventExtraction;
+import com.github.rrousso.erik_core.dto.extraction.FactEstablishment;
 import com.github.rrousso.erik_core.dto.extraction.KnowledgeTransfer;
 import com.github.rrousso.erik_core.dto.extraction.SecretRevelation;
 import com.github.rrousso.erik_core.dto.extraction.TensionChange;
@@ -43,6 +44,7 @@ public class ExtractionApplierRegistry {
     
     // Individual appliers injected by Spring
     private final EventApplier eventApplier;
+    private final FactEstablishmentApplier factEstablishmentApplier;
     private final KnowledgeTransferApplier knowledgeTransferApplier;
     private final SecretRevelationApplier secretRevelationApplier;
     private final TensionChangeApplier tensionChangeApplier;
@@ -50,17 +52,19 @@ public class ExtractionApplierRegistry {
     
     public ExtractionApplierRegistry(
             EventApplier eventApplier,
+            FactEstablishmentApplier factEstablishmentApplier,
             KnowledgeTransferApplier knowledgeTransferApplier,
             SecretRevelationApplier secretRevelationApplier,
             TensionChangeApplier tensionChangeApplier,
             CharacterAppearanceApplier characterAppearanceApplier) {
         this.eventApplier = eventApplier;
+        this.factEstablishmentApplier = factEstablishmentApplier;
         this.knowledgeTransferApplier = knowledgeTransferApplier;
         this.secretRevelationApplier = secretRevelationApplier;
         this.tensionChangeApplier = tensionChangeApplier;
         this.characterAppearanceApplier = characterAppearanceApplier;
         
-        log.info("ExtractionApplierRegistry initialized with {} applier types", 5);
+        log.info("ExtractionApplierRegistry initialized with {} applier types", 6);
     }
     
     /**
@@ -85,6 +89,29 @@ public class ExtractionApplierRegistry {
         }
         
         log.debug("[ExtractionApplierRegistry] Successfully applied {} events", events.size());
+    }
+    
+    /**
+     * Apply a list of fact establishments.
+     * 
+     * Creates new facts in the world that exist but may not be known by characters yet.
+     */
+    public void applyFactEstablishments(Stanza stanza, List<FactEstablishment> establishments) {
+        if (establishments == null || establishments.isEmpty()) {
+            return;
+        }
+        
+        log.info("[ExtractionApplierRegistry] Applying {} fact establishments", establishments.size());
+        
+        for (FactEstablishment establishment : establishments) {
+            try {
+                factEstablishmentApplier.apply(stanza, establishment);
+            } catch (Exception e) {
+                log.error("[ExtractionApplierRegistry] Failed to apply fact establishment: {}", 
+                    establishment.getStatement(), e);
+                // Continue with remaining establishments
+            }
+        }
     }
     
     /**
@@ -115,7 +142,13 @@ public class ExtractionApplierRegistry {
         log.info("[ExtractionApplierRegistry] Applying {} secret revelations", revelations.size());
         
         for (SecretRevelation revelation : revelations) {
-            secretRevelationApplier.apply(stanza, revelation);
+            try {
+                secretRevelationApplier.apply(stanza, revelation);
+            } catch (Exception e) {
+                log.error("[ExtractionApplierRegistry] Failed to apply secret revelation for character '{}': {}", 
+                    revelation.getCharacterName(), e.getMessage(), e);
+                // Continue with remaining revelations
+            }
         }
         
         log.debug("[ExtractionApplierRegistry] Successfully applied {} secret revelations", revelations.size());

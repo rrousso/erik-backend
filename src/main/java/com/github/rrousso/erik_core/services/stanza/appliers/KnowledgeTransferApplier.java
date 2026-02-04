@@ -107,8 +107,16 @@ public class KnowledgeTransferApplier implements ExtractionApplier<KnowledgeTran
         }
         
         // 3. Check if character already knows this fact
+        // Compare by hash (not ID) since:
+        // - New facts don't have IDs yet (JPA assigns on persist)
+        // - Existing facts are referenced by hash in the extraction system
+        // - Hash is the canonical identifier Gemini uses
+        String factHash = FactUtility.extractHash(fact.getFactKey());
         boolean alreadyKnows = character.getKnownFacts().stream()
-            .anyMatch(ck -> ck.getFact().getId().equals(fact.getId()));
+            .anyMatch(ck -> {
+                String knownFactHash = FactUtility.extractHash(ck.getFact().getFactKey());
+                return factHash != null && factHash.equals(knownFactHash);
+            });
         
         if (alreadyKnows) {
             log.debug("[KnowledgeTransferApplier] Character '{}' already knows fact [{}] - skipping duplicate", 

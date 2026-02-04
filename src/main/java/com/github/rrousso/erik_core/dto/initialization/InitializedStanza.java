@@ -18,8 +18,11 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class InitializedStanza {
     
-    @JsonProperty("worldIdentifier")
+	@JsonProperty("worldIdentifier")
     private String worldIdentifier;
+    
+    @JsonProperty("facts")
+    private List<InitFact> facts = new ArrayList<>();
     
     @JsonProperty("userCharacter")
     private UserCharacter userCharacter;
@@ -212,6 +215,14 @@ public class InitializedStanza {
     
     public void setWorldIdentifier(String worldIdentifier) {
         this.worldIdentifier = worldIdentifier;
+    }
+    
+    public List<InitFact> getFacts() {
+		return facts;
+	}
+    
+   	public void setFacts(List<InitFact> facts) {
+		this.facts = facts;
     }
     
     public UserCharacter getUserCharacter() {

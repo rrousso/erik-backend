@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.github.rrousso.erik_core.domain.models.SessionState;
 import com.github.rrousso.erik_core.exceptions.llm.LLMException;
@@ -67,6 +68,7 @@ public class BeatTransitionService {
      * @throws IllegalArgumentException if input format is invalid
      * @throws IllegalStateException if no active stanza or beat
      */
+    @Transactional
     public String transitionToNextBeat(String userInput, SessionState state) {
         
     	Long stanzaId = state.getActiveStanzaId();

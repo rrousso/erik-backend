@@ -109,6 +109,28 @@ public class Fact {
     @Column(name = "created_exchange")
     private Integer createdExchange;
     
+    // === DISCOVERY RULES ===
+    
+    /**
+     * Comma-separated list of valid reveal modes for learning this fact.
+     * Options: TOLD, OBSERVED, DOCUMENTED, INFERRED, SENSED_SPECIAL
+     * 
+     * - TOLD: Can only learn if explicitly told by another character
+     * - OBSERVED: Can learn by witnessing it directly
+     * - DOCUMENTED: Can learn by reading/research (public information)
+     * - INFERRED: Can figure it out from other facts
+     * - SENSED_SPECIAL: Can learn through special abilities (magic, supernatural senses, etc.)
+     * 
+     * Examples:
+     * - "TOLD" - very private secret, must be explicitly revealed
+     * - "TOLD,OBSERVED,SENSED_SPECIAL" - can learn through multiple ways
+     * - "DOCUMENTED" - public knowledge, anyone can learn it
+     * 
+     * NULL or empty = no restrictions (publicly observable fact)
+     */
+    @Column(name = "allowed_reveal_modes", length = 200)
+    private String allowedRevealModes;
+    
     // === TIMESTAMPS ===
     @CreationTimestamp
     @Column(updatable = false)
@@ -145,6 +167,53 @@ public class Fact {
     
     public boolean isAboutCharacter(String characterName) {
         return "character".equals(subjectType) && characterName.equals(subjectId);
+    }
+    
+    /**
+     * Check if a reveal mode is allowed for this fact.
+     * If allowedRevealModes is null/empty, all modes are allowed (public fact).
+     */
+    public boolean isRevealModeAllowed(String mode) {
+        if (mode == null) {
+            return false;
+        }
+        
+        // Null or empty = no restrictions
+        if (allowedRevealModes == null || allowedRevealModes.isEmpty()) {
+            return true;
+        }
+        
+        String[] modes = allowedRevealModes.split(",");
+        for (String allowed : modes) {
+            if (allowed.trim().equalsIgnoreCase(mode)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Get allowed modes as array.
+     */
+    public String[] getAllowedModesArray() {
+        if (allowedRevealModes == null || allowedRevealModes.isEmpty()) {
+            return new String[0];
+        }
+        return allowedRevealModes.split(",");
+    }
+    
+    /**
+     * Check if this fact can only be learned by being told.
+     */
+    public boolean isToldOnly() {
+        return "TOLD".equals(allowedRevealModes);
+    }
+    
+    /**
+     * Check if this is a restricted fact (has reveal mode constraints).
+     */
+    public boolean isRestricted() {
+        return allowedRevealModes != null && !allowedRevealModes.isEmpty();
     }
     
  // === GETTERS AND SETTERS WITH VALIDATION ===
@@ -271,4 +340,13 @@ public class Fact {
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
     }
+    
+    public String getAllowedRevealModes() {
+        return allowedRevealModes;
+    }
+    
+    public void setAllowedRevealModes(String allowedRevealModes) {
+        this.allowedRevealModes = allowedRevealModes;
+    }
+
 }

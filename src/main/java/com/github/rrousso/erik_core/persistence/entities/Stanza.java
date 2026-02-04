@@ -90,9 +90,6 @@ public class Stanza {
     private List<Fact> facts = new ArrayList<>();
     
     @OneToMany(mappedBy = "stanza", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<Secret> secrets = new ArrayList<>();
-    
-    @OneToMany(mappedBy = "stanza", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Tension> tensions = new ArrayList<>();
     
     @OneToMany(mappedBy = "stanza", cascade = CascadeType.ALL, orphanRemoval = true)
@@ -221,11 +218,17 @@ public class Stanza {
         // Delete minor events from ended beat
         deleteMinorEventsFromBeat(closedBeat);
         
-        // Increment beat counter
-        this.currentBeat++;
+        // Calculate next beat number from actual beats (prevents duplicate key errors)
+        int nextBeatNumber = beats.stream()
+            .map(Beat::getBeatNumber)
+            .max(Integer::compareTo)
+            .orElse(0) + 1;
+        
+        // Update counter to match
+        this.currentBeat = nextBeatNumber;
         
         // Create new beat
-        Beat newBeat = new Beat(this, this.currentBeat, this.currentExchange + 1);
+        Beat newBeat = new Beat(this, nextBeatNumber, this.currentExchange + 1);
         newBeat.setTransitionContext(transitionContext);
         beats.add(newBeat);
     }
@@ -614,14 +617,6 @@ public class Stanza {
     
     public void setFacts(List<Fact> facts) {
         this.facts = facts;
-    }
-    
-    public List<Secret> getSecrets() {
-        return secrets;
-    }
-    
-    public void setSecrets(List<Secret> secrets) {
-        this.secrets = secrets;
     }
     
     public List<Tension> getTensions() {

@@ -24,11 +24,8 @@ public class StanzaCharacter {
     @JsonProperty("presentInFirstScene")
     private boolean presentInFirstScene;
     
-    @JsonProperty("currentKnowledge")
-    private List<String> currentKnowledge = new ArrayList<>();
-    
-    @JsonProperty("doesNotKnow")
-    private List<String> doesNotKnow = new ArrayList<>();
+    @JsonProperty("knows")
+    private List<String> knows = new ArrayList<>();  // List of fact tempIds
     
     @JsonProperty("currentEmotionalState")
     private String currentEmotionalState;
@@ -75,7 +72,7 @@ public class StanzaCharacter {
             }
         }
         
-        // CRITICAL: Knowledge boundaries
+        /*
         if (!currentKnowledge.isEmpty()) {
             sb.append("\n**KNOWS:**\n");
             for (String fact : currentKnowledge) {
@@ -89,6 +86,7 @@ public class StanzaCharacter {
                 sb.append("  ✗ ").append(fact).append("\n");
             }
         }
+        */
         
         return sb.toString();
     }
@@ -115,49 +113,25 @@ public class StanzaCharacter {
             sb.append("  Current state: ").append(currentEmotionalState).append("\n");
         }
         
+        /*
         if (!currentKnowledge.isEmpty()) {
-            sb.append("  If they appear, they know: ");
-            sb.append(String.join("; ", currentKnowledge.subList(0, Math.min(3, currentKnowledge.size()))));
-            sb.append("\n");
+            sb.append("\n**KNOWS:**\n");
+            for (String fact : currentKnowledge) {
+                sb.append("  ✓ ").append(fact).append("\n");
+            }
         }
         
         if (!doesNotKnow.isEmpty()) {
-            sb.append("  They do NOT know: ");
-            sb.append(String.join("; ", doesNotKnow.subList(0, Math.min(2, doesNotKnow.size()))));
-            sb.append("\n");
+            sb.append("\n**DOES NOT KNOW (Cannot act on this information):**\n");
+            for (String fact : doesNotKnow) {
+                sb.append("  ✗ ").append(fact).append("\n");
+            }
         }
+        */
         
         return sb.toString();
     }
     
-    // ========== KNOWLEDGE MANAGEMENT ==========
-    
-    /**
-     * Add a fact to this character's knowledge
-     */
-    public void learnFact(String fact) {
-        if (!currentKnowledge.contains(fact)) {
-            currentKnowledge.add(fact);
-        }
-        // Remove from doesNotKnow if present
-        doesNotKnow.remove(fact);
-    }
-    
-    /**
-     * Check if character knows a specific fact
-     */
-    public boolean knows(String fact) {
-        return currentKnowledge.stream()
-            .anyMatch(k -> k.toLowerCase().contains(fact.toLowerCase()));
-    }
-    
-    /**
-     * Check if character explicitly doesn't know something
-     */
-    public boolean explicitlyDoesNotKnow(String fact) {
-        return doesNotKnow.stream()
-            .anyMatch(k -> k.toLowerCase().contains(fact.toLowerCase()));
-    }
     
     // ========== GETTERS AND SETTERS ==========
     
@@ -185,20 +159,12 @@ public class StanzaCharacter {
         this.presentInFirstScene = presentInFirstScene;
     }
     
-    public List<String> getCurrentKnowledge() {
-        return currentKnowledge;
+    public List<String> getKnows() {
+        return knows;
     }
     
-    public void setCurrentKnowledge(List<String> currentKnowledge) {
-        this.currentKnowledge = currentKnowledge;
-    }
-    
-    public List<String> getDoesNotKnow() {
-        return doesNotKnow;
-    }
-    
-    public void setDoesNotKnow(List<String> doesNotKnow) {
-        this.doesNotKnow = doesNotKnow;
+    public void setKnows(List<String> knows) {
+        this.knows = knows;
     }
     
     public String getCurrentEmotionalState() {

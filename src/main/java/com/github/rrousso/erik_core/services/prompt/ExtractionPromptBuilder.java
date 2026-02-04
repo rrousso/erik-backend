@@ -1,7 +1,7 @@
 package com.github.rrousso.erik_core.services.prompt;
 
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -9,7 +9,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.github.rrousso.erik_core.persistence.entities.CharacterKnowledge;
-import com.github.rrousso.erik_core.persistence.entities.CharacterSecretState;
 import com.github.rrousso.erik_core.persistence.entities.Fact;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
 import com.github.rrousso.erik_core.persistence.entities.StanzaCharacter;
@@ -21,8 +20,13 @@ import com.github.rrousso.erik_core.util.FactUtility;
  * Builds extraction prompts by filling in the state_extraction.txt template
  * with current database state.
  * 
- * This service knows how to format JPA entities into readable text for the
- * analytical LLM to understand what the current state is before extracting changes.
+ * POST-REFACTOR: Now works with unified CharacterKnowledge entity.
+ * - KNOWS: Character knows the fact
+ * - SUSPICIOUS: Character suspects the fact
+ * - UNAWARE: No CharacterKnowledge record exists (implicit)
+ * 
+ * This service formats JPA entities into readable text for the analytical LLM
+ * to understand current state before extracting changes.
  */
 @Service
 public class ExtractionPromptBuilder {
@@ -60,14 +64,14 @@ public class ExtractionPromptBuilder {
         String charactersSection = formatCharacters(stanza);
         String tensionsSection = formatTensions(stanza);
         String recentEventsSection = formatRecentEvents(stanza);
-        String factRegistrySection = formatFactRegistry(stanza);  // NEW
+        String factRegistrySection = formatFactRegistry(stanza);
         
         // Replace placeholders in template
         String prompt = extractionTemplate
             .replace("{characters}", charactersSection)
             .replace("{tensions}", tensionsSection)
             .replace("{recent_events}", recentEventsSection)
-            .replace("{fact_registry}", factRegistrySection)  // NEW
+            .replace("{fact_registry}", factRegistrySection)
             .replace("{user_input}", userInput)
             .replace("{narrator_response}", narratorResponse);
         
@@ -77,7 +81,12 @@ public class ExtractionPromptBuilder {
     // ========== FORMATTING METHODS ==========
     
     /**
-     * Format all characters with their knowledge state
+     * Format all characters with their knowledge state.
+     * 
+     * Shows three categories:
+     * 1. KNOWS - facts they know (awarenessState = KNOWS)
+     * 2. SUSPICIOUS - facts they suspect (awarenessState = SUSPICIOUS)
+     * 3. UNAWARE - restricted facts they don't know (no CharacterKnowledge record)
      */
     private String formatCharacters(Stanza stanza) {
         StringBuilder sb = new StringBuilder();
@@ -86,6 +95,11 @@ public class ExtractionPromptBuilder {
         if (characters.isEmpty()) {
             return "[No characters defined]";
         }
+        
+        // Get all restricted facts for UNAWARE detection
+        List<Fact> restrictedFacts = stanza.getFacts().stream()
+            .filter(Fact::isRestricted)
+            .collect(Collectors.toList());
         
         for (StanzaCharacter character : characters) {
             sb.append("---\n");
@@ -103,46 +117,57 @@ public class ExtractionPromptBuilder {
                 }
             }
             
-            // What this character knows
-            List<CharacterKnowledge> knowledge = character.getKnownFacts();
-            if (!knowledge.isEmpty()) {
+            // Get character's knowledge records
+            List<CharacterKnowledge> allKnowledge = character.getKnownFacts();
+            
+            // Split by awareness state
+            List<CharacterKnowledge> knownFacts = allKnowledge.stream()
+                .filter(ck -> "KNOWS".equals(ck.getAwarenessState()))
+                .collect(Collectors.toList());
+                
+            List<CharacterKnowledge> suspectedFacts = allKnowledge.stream()
+                .filter(ck -> "SUSPICIOUS".equals(ck.getAwarenessState()))
+                .collect(Collectors.toList());
+            
+            // Build set of fact IDs this character knows or suspects
+            Set<Long> trackedFactIds = allKnowledge.stream()
+                .map(ck -> ck.getFact().getId())
+                .collect(Collectors.toSet());
+            
+            // Determine UNAWARE facts: restricted facts not in trackedFactIds
+            List<Fact> unawareFacts = restrictedFacts.stream()
+                .filter(fact -> !trackedFactIds.contains(fact.getId()))
+                .collect(Collectors.toList());
+            
+            // Display KNOWS
+            if (!knownFacts.isEmpty()) {
                 sb.append("Knows:\n");
-                for (CharacterKnowledge ck : knowledge) {
-                    sb.append("  - ").append(ck.getFact().getPredicate());
-                    if (ck.getFact().getFactValue() != null) {
-                        sb.append(": ").append(ck.getFact().getFactValue());
-                    }
-                    sb.append(" [learned via ").append(ck.getHow()).append("]\n");
+                for (CharacterKnowledge ck : knownFacts) {
+                    String hash = FactUtility.extractHash(ck.getFact().getFactKey());
+                    sb.append("  - [").append(hash).append("] ")
+                      .append(ck.getFact().getPredicate())
+                      .append(" [via ").append(ck.getHow()).append("]\n");
                 }
             }
             
-            // Secrets this character does NOT know
-            List<CharacterSecretState> secretStates = character.getSecretStates();
-            List<CharacterSecretState> unknownSecrets = secretStates.stream()
-                .filter(css -> "UNAWARE".equals(css.getState()))
-                .collect(Collectors.toList());
-            
-         // In formatCharacters():
-            if (!unknownSecrets.isEmpty()) {
-                sb.append("Does NOT know:\n");
-                for (CharacterSecretState css : unknownSecrets) {
-                    Fact secretFact = css.getSecret().getFact();
-                    String hash = FactUtility.extractHash(secretFact.getFactKey());
-                    sb.append("  - SECRET [").append(hash).append("]: ")
-                      .append(secretFact.getPredicate()).append("\n");
-                }
-            }
-            
-            // Secrets this character suspects
-            List<CharacterSecretState> suspectedSecrets = secretStates.stream()
-                .filter(css -> "SUSPICIOUS".equals(css.getState()))
-                .collect(Collectors.toList());
-            
-            if (!suspectedSecrets.isEmpty()) {
+            // Display SUSPICIOUS
+            if (!suspectedFacts.isEmpty()) {
                 sb.append("Suspects:\n");
-                for (CharacterSecretState css : suspectedSecrets) {
-                    String secretDesc = css.getSecret().getFact().getPredicate();
-                    sb.append("  - SECRET: ").append(secretDesc).append("\n");
+                for (CharacterKnowledge ck : suspectedFacts) {
+                    String hash = FactUtility.extractHash(ck.getFact().getFactKey());
+                    sb.append("  - [").append(hash).append("] ")
+                      .append(ck.getFact().getPredicate()).append("\n");
+                }
+            }
+            
+            // Display UNAWARE (restricted facts character doesn't know)
+            if (!unawareFacts.isEmpty()) {
+                sb.append("Does NOT know:\n");
+                for (Fact fact : unawareFacts) {
+                    String hash = FactUtility.extractHash(fact.getFactKey());
+                    sb.append("  - [").append(hash).append("] ")
+                      .append(fact.getPredicate())
+                      .append(" [restricted: ").append(fact.getAllowedRevealModes()).append("]\n");
                 }
             }
             
@@ -217,6 +242,10 @@ public class ExtractionPromptBuilder {
      * 
      * This allows Gemini to see what facts already exist and reference them
      * by hash instead of creating duplicates.
+     * 
+     * Facts are separated into:
+     * - RESTRICTED: Facts with allowedRevealModes (need special conditions to learn)
+     * - PUBLIC: Facts without restrictions (observable by anyone)
      */
     private String formatFactRegistry(Stanza stanza) {
         StringBuilder sb = new StringBuilder();
@@ -226,59 +255,44 @@ public class ExtractionPromptBuilder {
             return "[No facts recorded yet]";
         }
         
-        // Group facts by kind for easier reading
-        Map<String, List<Fact>> factsByKind = facts.stream()
-            .collect(Collectors.groupingBy(Fact::getKind));
+        // Separate restricted from public facts
+        List<Fact> restrictedFacts = facts.stream()
+            .filter(Fact::isRestricted)
+            .collect(Collectors.toList());
+            
+        List<Fact> publicFacts = facts.stream()
+            .filter(f -> !f.isRestricted())
+            .collect(Collectors.toList());
         
-        // USER_PRIVATE facts
-        if (factsByKind.containsKey("USER_PRIVATE")) {
-            sb.append("USER PRIVATE FACTS (characters don't know unless revealed):\n");
-            for (Fact fact : factsByKind.get("USER_PRIVATE")) {
+        // Show restricted facts first (these are the important ones to track)
+        if (!restrictedFacts.isEmpty()) {
+            sb.append("RESTRICTED FACTS (require specific reveal modes to learn):\n");
+            for (Fact fact : restrictedFacts) {
                 String hash = FactUtility.extractHash(fact.getFactKey());
-                sb.append("  [").append(hash).append("] ").append(fact.getPredicate());
-                if (fact.getFactValue() != null && !fact.getFactValue().equals("\"true\"")) {
-                    sb.append(" = ").append(fact.getFactValue());
+                sb.append("  [").append(hash).append("] ")
+                  .append(fact.getPredicate())
+                  .append(" [reveal: ").append(fact.getAllowedRevealModes()).append("]");
+                
+                if (fact.getCreatedBeat() != null && fact.getCreatedBeat() > 0) {
+                    sb.append(" (emerged beat ").append(fact.getCreatedBeat()).append(")");
                 }
                 sb.append("\n");
             }
             sb.append("\n");
         }
         
-        // USER_PUBLIC facts
-        if (factsByKind.containsKey("USER_PUBLIC")) {
-            sb.append("USER PUBLIC FACTS (observable):\n");
-            for (Fact fact : factsByKind.get("USER_PUBLIC")) {
+        // Show public/observable facts
+        if (!publicFacts.isEmpty()) {
+            sb.append("PUBLIC FACTS (observable, no restrictions):\n");
+            for (Fact fact : publicFacts) {
                 String hash = FactUtility.extractHash(fact.getFactKey());
-                sb.append("  [").append(hash).append("] ").append(fact.getPredicate());
-                if (fact.getFactValue() != null && !fact.getFactValue().equals("\"true\"")) {
-                    sb.append(" = ").append(fact.getFactValue());
+                sb.append("  [").append(hash).append("] ")
+                  .append(fact.getPredicate());
+                
+                if (fact.getCreatedBeat() != null && fact.getCreatedBeat() > 0) {
+                    sb.append(" (emerged beat ").append(fact.getCreatedBeat()).append(")");
                 }
                 sb.append("\n");
-            }
-            sb.append("\n");
-        }
-        
-        // WORLD facts
-        if (factsByKind.containsKey("WORLD")) {
-            sb.append("WORLD FACTS (general truths):\n");
-            for (Fact fact : factsByKind.get("WORLD")) {
-                String hash = FactUtility.extractHash(fact.getFactKey());
-                sb.append("  [").append(hash).append("] ").append(fact.getPredicate());
-                if (fact.getFactValue() != null && !fact.getFactValue().equals("\"true\"")) {
-                    sb.append(" = ").append(fact.getFactValue());
-                }
-                sb.append("\n");
-            }
-            sb.append("\n");
-        }
-        
-        // OBSERVED facts (emergent from narration)
-        if (factsByKind.containsKey("OBSERVED")) {
-            sb.append("OBSERVED FACTS (emerged during narration):\n");
-            for (Fact fact : factsByKind.get("OBSERVED")) {
-                String hash = FactUtility.extractHash(fact.getFactKey());
-                sb.append("  [").append(hash).append("] ").append(fact.getPredicate());
-                sb.append(" (beat ").append(fact.getCreatedBeat()).append(")\n");
             }
             sb.append("\n");
         }
