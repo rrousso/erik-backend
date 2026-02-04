@@ -6,11 +6,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Represents a character in the stanza with full knowledge tracking.
- * Used for both explicit (user-mentioned) and likely (inferred) characters.
+ * Represents a character in the initialization phase.
+ * Updated to match Gemini's blueprint-based format.
  * 
- * Key innovation: Explicit tracking of what characters KNOW and DON'T KNOW
- * to prevent information bleed in narration.
+ * Key changes from previous format:
+ * - Added blueprint (tier1/tier2/tier3 structure)
+ * - Replaced currentKnowledge/doesNotKnow with knows array (fact tempIds)
+ * - Removed presentInFirstScene (determined by narrator context)
+ * - Removed whyIncluded (less important in practice)
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class StanzaCharacter {
@@ -21,32 +24,101 @@ public class StanzaCharacter {
     @JsonProperty("canonRole")
     private String canonRole;
     
-    @JsonProperty("presentInFirstScene")
-    private boolean presentInFirstScene;
-    
     @JsonProperty("knows")
-    private List<String> knows = new ArrayList<>();  // List of fact tempIds
+    private List<String> knows = new ArrayList<>();  // References to fact tempIds
     
     @JsonProperty("currentEmotionalState")
     private String currentEmotionalState;
     
-    @JsonProperty("currentMotivations")
-    private List<String> currentMotivations = new ArrayList<>();
-    
     @JsonProperty("relationshipToUser")
     private String relationshipToUser;
-    
-    @JsonProperty("whyIncluded")
-    private String whyIncluded;
+
+    @JsonProperty("presentInFirstScene")
+    private Boolean presentInFirstScene;  
+
+    @JsonProperty("blueprint")
+    private CharacterBlueprint blueprint;
     
     // ========== CONSTRUCTORS ==========
     
     public StanzaCharacter() {}
     
-    // ========== FORMAT FOR NARRATOR ==========
+    // ========== INNER CLASS: BLUEPRINT ==========
     
     /**
-     * Full context for present characters
+     * Three-tiered character definition structure.
+     * This gives the narrator essential character info in a compact format.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class CharacterBlueprint {
+        
+        @JsonProperty("tier1_essentials")
+        private String tier1Essentials;  // Archetype & Speech Pattern
+        
+        @JsonProperty("tier2_motivators")
+        private String tier2Motivators;  // Primary Goal & Major Fear
+        
+        @JsonProperty("tier3_anchors")
+        private List<String> tier3Anchors = new ArrayList<>();  // 3 visual details
+        
+        public CharacterBlueprint() {}
+        
+        public String getTier1Essentials() {
+            return tier1Essentials;
+        }
+        
+        public void setTier1Essentials(String tier1Essentials) {
+            this.tier1Essentials = tier1Essentials;
+        }
+        
+        public String getTier2Motivators() {
+            return tier2Motivators;
+        }
+        
+        public void setTier2Motivators(String tier2Motivators) {
+            this.tier2Motivators = tier2Motivators;
+        }
+        
+        public List<String> getTier3Anchors() {
+            return tier3Anchors;
+        }
+        
+        public void setTier3Anchors(List<String> tier3Anchors) {
+            this.tier3Anchors = tier3Anchors;
+        }
+        
+        /**
+         * Format blueprint for narrator context
+         */
+        public String toNarratorContext() {
+            StringBuilder sb = new StringBuilder();
+            
+            if (tier1Essentials != null && !tier1Essentials.isEmpty()) {
+                sb.append("Essentials: ").append(tier1Essentials).append("\n");
+            }
+            if (tier2Motivators != null && !tier2Motivators.isEmpty()) {
+                sb.append("Motivators: ").append(tier2Motivators).append("\n");
+            }
+            if (tier3Anchors != null && !tier3Anchors.isEmpty()) {
+                sb.append("Visual Anchors: ").append(String.join(", ", tier3Anchors)).append("\n");
+            }
+            
+            return sb.toString();
+        }
+    }
+    
+    // ========== CONVENIENCE METHODS ==========
+    
+    /**
+     * Check if this character should be in the opening scene
+     */
+    public boolean isPresentInFirstScene() {
+        return presentInFirstScene != null && presentInFirstScene;
+    }
+    
+    
+    /**
+     * Format for narrator context with full detail
      */
     public String toNarratorContext() {
         StringBuilder sb = new StringBuilder();
@@ -62,76 +134,29 @@ public class StanzaCharacter {
         }
         
         if (currentEmotionalState != null && !currentEmotionalState.isEmpty()) {
-            sb.append("Current Emotional State: ").append(currentEmotionalState).append("\n");
+            sb.append("Current State: ").append(currentEmotionalState).append("\n");
         }
         
-        if (!currentMotivations.isEmpty()) {
-            sb.append("Current Motivations:\n");
-            for (String motivation : currentMotivations) {
-                sb.append("  - ").append(motivation).append("\n");
-            }
+        if (blueprint != null) {
+            sb.append("\n").append(blueprint.toNarratorContext());
         }
         
-        /*
-        if (!currentKnowledge.isEmpty()) {
-            sb.append("\n**KNOWS:**\n");
-            for (String fact : currentKnowledge) {
-                sb.append("  ✓ ").append(fact).append("\n");
-            }
-        }
-        
-        if (!doesNotKnow.isEmpty()) {
-            sb.append("\n**DOES NOT KNOW (Cannot act on this information):**\n");
-            for (String fact : doesNotKnow) {
-                sb.append("  ✗ ").append(fact).append("\n");
-            }
-        }
-        */
+        // Knowledge will be added separately by persistence layer
         
         return sb.toString();
     }
     
     /**
-     * Limited context for potential characters (might appear)
+     * Format for potential character (less detail)
      */
     public String toPotentialContext() {
         StringBuilder sb = new StringBuilder();
-        
-        sb.append("- **").append(name).append("**");
-        
+        sb.append("- ").append(name);
         if (canonRole != null && !canonRole.isEmpty()) {
             sb.append(" (").append(canonRole).append(")");
         }
-        
-        sb.append("\n");
-        
-        if (whyIncluded != null && !whyIncluded.isEmpty()) {
-            sb.append("  Why they might appear: ").append(whyIncluded).append("\n");
-        }
-        
-        if (currentEmotionalState != null && !currentEmotionalState.isEmpty()) {
-            sb.append("  Current state: ").append(currentEmotionalState).append("\n");
-        }
-        
-        /*
-        if (!currentKnowledge.isEmpty()) {
-            sb.append("\n**KNOWS:**\n");
-            for (String fact : currentKnowledge) {
-                sb.append("  ✓ ").append(fact).append("\n");
-            }
-        }
-        
-        if (!doesNotKnow.isEmpty()) {
-            sb.append("\n**DOES NOT KNOW (Cannot act on this information):**\n");
-            for (String fact : doesNotKnow) {
-                sb.append("  ✗ ").append(fact).append("\n");
-            }
-        }
-        */
-        
         return sb.toString();
     }
-    
     
     // ========== GETTERS AND SETTERS ==========
     
@@ -151,14 +176,6 @@ public class StanzaCharacter {
         this.canonRole = canonRole;
     }
     
-    public boolean isPresentInFirstScene() {
-        return presentInFirstScene;
-    }
-    
-    public void setPresentInFirstScene(boolean presentInFirstScene) {
-        this.presentInFirstScene = presentInFirstScene;
-    }
-    
     public List<String> getKnows() {
         return knows;
     }
@@ -175,14 +192,6 @@ public class StanzaCharacter {
         this.currentEmotionalState = currentEmotionalState;
     }
     
-    public List<String> getCurrentMotivations() {
-        return currentMotivations;
-    }
-    
-    public void setCurrentMotivations(List<String> currentMotivations) {
-        this.currentMotivations = currentMotivations;
-    }
-    
     public String getRelationshipToUser() {
         return relationshipToUser;
     }
@@ -191,11 +200,19 @@ public class StanzaCharacter {
         this.relationshipToUser = relationshipToUser;
     }
     
-    public String getWhyIncluded() {
-        return whyIncluded;
+    public Boolean getPresentInFirstScene() {
+        return presentInFirstScene;
+    }
+
+    public void setPresentInFirstScene(Boolean presentInFirstScene) {
+        this.presentInFirstScene = presentInFirstScene;
     }
     
-    public void setWhyIncluded(String whyIncluded) {
-        this.whyIncluded = whyIncluded;
+    public CharacterBlueprint getBlueprint() {
+        return blueprint;
+    }
+    
+    public void setBlueprint(CharacterBlueprint blueprint) {
+        this.blueprint = blueprint;
     }
 }

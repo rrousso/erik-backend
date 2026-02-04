@@ -144,6 +144,12 @@ public class StanzaPersistenceService {
             stanza.setTimeContext(world.getTimeContext());
             stanza.setWorldState(world.getCurrentWorldState());
             
+            // CRITICAL: Set tone from worldContext
+            if (world.getTone() != null && !world.getTone().isEmpty()) {
+                stanza.setTone(world.getTone());
+                log.debug("[Persistence] Set stanza tone: {}", world.getTone());
+            }
+            
             // World rules as array
             if (world.getSupernaturalRules() != null) {
                 stanza.setWorldRules(world.getSupernaturalRules().toArray(new String[0]));
@@ -214,8 +220,15 @@ public class StanzaPersistenceService {
         character.setEmotionalState(charData.getCurrentEmotionalState());
         character.setRelationshipToUser(charData.getRelationshipToUser());
         
-        if (charData.getCurrentMotivations() != null) {
-            character.setMotivations(charData.getCurrentMotivations().toArray(new String[0]));
+        // Store blueprint data in dedicated fields
+        if (charData.getBlueprint() != null) {
+            var blueprint = charData.getBlueprint();
+            character.setBlueprintTier1Essentials(blueprint.getTier1Essentials());
+            character.setBlueprintTier2Motivators(blueprint.getTier2Motivators());
+            
+            if (blueprint.getTier3Anchors() != null && !blueprint.getTier3Anchors().isEmpty()) {
+                character.setBlueprintTier3Anchors(blueprint.getTier3Anchors().toArray(new String[0]));
+            }
         }
         
         // Presence status based on tier and presentInFirstScene
@@ -344,6 +357,7 @@ public class StanzaPersistenceService {
             }
         }
     }
+    
     /**
      * Create CharacterKnowledge records for fact tempIds the character knows.
      */

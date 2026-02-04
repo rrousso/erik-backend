@@ -23,7 +23,10 @@ public class WorldContext {
     
     @JsonProperty("timeContext")
     private String timeContext;
-    
+
+    @JsonProperty("Tone")
+    private String tone;  // CRITICAL: e.g., "Magical Realism", "Industrial Horror"
+
     // ========== CONSTRUCTORS ==========
     
     public WorldContext() {}
@@ -82,6 +85,11 @@ public class WorldContext {
     
     public String toNarratorContext() {
         StringBuilder sb = new StringBuilder();
+        
+        // Tone (CRITICAL)
+        if (tone != null && !tone.isEmpty()) {
+            sb.append("**TONE:** ").append(tone).append("\n\n");
+        }
         
         // Time context
         if (timeContext != null && !timeContext.isEmpty()) {
@@ -166,5 +174,13 @@ public class WorldContext {
     
     public void setTimeContext(String timeContext) {
         this.timeContext = timeContext;
+    }
+    
+    public String getTone() {
+        return tone;
+    }
+
+    public void setTone(String tone) {
+        this.tone = tone;
     }
 }

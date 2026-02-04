@@ -70,7 +70,20 @@ public class StanzaCharacter {
     
     @Column(columnDefinition = "TEXT[]")
     private String[] goals;
-    
+
+    // === BLUEPRINT (3-TIER CHARACTER DEFINITION) ===
+    // Tier 1: Archetype & Speech Pattern
+    @Column(name = "blueprint_tier1_essentials", columnDefinition = "TEXT")
+    private String blueprintTier1Essentials;
+
+    // Tier 2: Primary Goal & Major Fear
+    @Column(name = "blueprint_tier2_motivators", columnDefinition = "TEXT")
+    private String blueprintTier2Motivators;
+
+    // Tier 3: Visual anchors (array of 3 visual details)
+    @Column(name = "blueprint_tier3_anchors", columnDefinition = "TEXT[]")
+    private String[] blueprintTier3Anchors;
+
     // === KNOWLEDGE RELATIONSHIPS ===
     @OneToMany(mappedBy = "character", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CharacterKnowledge> knownFacts = new ArrayList<>();
@@ -252,6 +265,30 @@ public class StanzaCharacter {
         return sb.toString();
     }
     
+    /**
+     * Format blueprint data for narrator context
+     */
+    public String formatBlueprintForNarrator() {
+        if (blueprintTier1Essentials == null && blueprintTier2Motivators == null && blueprintTier3Anchors == null) {
+            return "";
+        }
+        
+        StringBuilder sb = new StringBuilder();
+        sb.append("\nBLUEPRINT:\n");
+        
+        if (blueprintTier1Essentials != null && !blueprintTier1Essentials.isEmpty()) {
+            sb.append("  Essentials: ").append(blueprintTier1Essentials).append("\n");
+        }
+        if (blueprintTier2Motivators != null && !blueprintTier2Motivators.isEmpty()) {
+            sb.append("  Motivators: ").append(blueprintTier2Motivators).append("\n");
+        }
+        if (blueprintTier3Anchors != null && blueprintTier3Anchors.length > 0) {
+            sb.append("  Visual Anchors: ").append(String.join(", ", blueprintTier3Anchors)).append("\n");
+        }
+        
+        return sb.toString();
+    }
+    
     // === GETTERS AND SETTERS ===
     
     public Long getId() {
@@ -388,5 +425,28 @@ public class StanzaCharacter {
     
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+    public String getBlueprintTier1Essentials() {
+        return blueprintTier1Essentials;
+    }
+
+    public void setBlueprintTier1Essentials(String blueprintTier1Essentials) {
+        this.blueprintTier1Essentials = blueprintTier1Essentials;
+    }
+
+    public String getBlueprintTier2Motivators() {
+        return blueprintTier2Motivators;
+    }
+
+    public void setBlueprintTier2Motivators(String blueprintTier2Motivators) {
+        this.blueprintTier2Motivators = blueprintTier2Motivators;
+    }
+
+    public String[] getBlueprintTier3Anchors() {
+        return blueprintTier3Anchors;
+    }
+
+    public void setBlueprintTier3Anchors(String[] blueprintTier3Anchors) {
+        this.blueprintTier3Anchors = blueprintTier3Anchors;
     }
 }

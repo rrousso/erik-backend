@@ -437,6 +437,8 @@ public class Stanza {
                 if (c.getGoals() != null && !(c.getGoals().length > 0)) {
                     sb.append("Goals: ").append(c.getGoals()).append("\n");
                 }
+                
+                sb.append(c.formatBlueprintForNarrator());
                 sb.append(c.toNarratorContext(restrictedFacts));
                 sb.append("\n---\n\n");
             }
