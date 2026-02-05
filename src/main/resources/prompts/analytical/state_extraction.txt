@@ -3,8 +3,23 @@ You are analyzing a narrative exchange in an interactive story to extract state 
 Your job is to identify what ACTUALLY HAPPENED in the narration that needs to be recorded, not to speculate or invent details.
 
 ==========================================================
+CRITICAL EXTRACTION RULES
+==========================================================
+
+1. **Fact Discovery Protocol**: Use factDiscoveries for ALL information changes. This is the PRIMARY method and replaces old knowledgeTransfer arrays.
+
+2. **Registry Check**: You MUST search the FACT REGISTRY for an existing fact before creating a new one. If found, use existingFactHash. If not found, use tempId.
+
+3. **Strict Kayfabe**: Only extract what is CLEARLY shown or stated in the Narrator's response. Do not assume or invent details.
+
+4. **Output Format**: Respond with ONLY valid JSON. No code fences, no explanatory text. Output must start with { and end with }.
+
+==========================================================
 CURRENT DATABASE STATE
 ==========================================================
+
+WORLD CONTEXT:
+{world_context}
 
 CHARACTERS:
 {characters}
@@ -17,29 +32,6 @@ RECENT EVENTS:
 
 FACT REGISTRY:
 {fact_registry}
-
-⚠️ CRITICAL - DEDUPLICATION RULES:
-
-Before creating a NEW knowledge transfer, check if the fact already exists in the registry above.
-
-If a character learns something that matches an existing fact:
-- Use "existingFactHash" field with the hash from registry (e.g., "a3f8b2c1")
-- Do NOT include "whatTheyLearned" - the hash references the existing fact
-- This prevents duplicate facts in the database
-
-Example - Character learns existing fact:
-{
-  "characterName": "Derek Hale",
-  "existingFactHash": "a3f8b2c1",
-  "howLearned": "OBSERVED"
-}
-
-Example - Character learns something NEW:
-{
-  "characterName": "Stiles",
-  "whatTheyLearned": "User can sense supernatural creatures",
-  "howLearned": "TOLD"
-}
 
 ==========================================================
 THIS EXCHANGE
@@ -55,165 +47,119 @@ NARRATOR RESPONSE:
 EXTRACTION TASK
 ==========================================================
 
-Analyze the narrator's response and extract the following types of changes. Only include changes that are CLEARLY stated or shown in the narration. Do not infer things that might have happened.
+Analyze the exchange and extract changes into the following structure:
 
-0. FACTS (New in the world)
-   New truths established during this exchange that exist but may not be known by characters yet.
-   
-   When to create facts:
-   - Something new is CREATED with lasting existence (objects, items, abilities)
-   - Hidden information is ESTABLISHED but not revealed (box contents, secret passages, locked doors)
-   - Character abilities/states change PERMANENTLY (gained power, lost ability, transformed)
-   - Important plot-relevant information emerges (identity reveals, relationship changes)
-   
-   When NOT to create facts:
-   - Trivial scene details (wall color, furniture placement)
-   - Temporary states (character is standing, weather, time of day)
-   - Character emotions or momentary reactions
-   - Information already in the fact registry
-   - Actions or movements (walked to window, opened door)
-   
-   allowedRevealModes:
-   - null or empty = publicly observable, anyone can see it
-   - "OBSERVED" = must directly observe (open box, look inside, examine closely)
-   - "TOLD" = must be told by someone who knows
-   - "TOLD,OBSERVED" = can learn either way
-   - "TOLD,OBSERVED,INFERRED" = multiple valid ways to learn
-   - "SENSED_SPECIAL" = requires special senses (magic, supernatural abilities)
-   
-   Examples:
-   ✓ User creates a gift box → fact: "The gift box contains a squeaky mouse that smells like cooked meat" (allowedRevealModes: "OBSERVED")
-   ✓ Character permanently gains ability → fact: "Malik can speak human language" (allowedRevealModes: "OBSERVED")
-   ✓ Hidden object created → fact: "A secret door exists behind the bookshelf" (allowedRevealModes: "OBSERVED")
-   ✓ Character transformation → fact: "User is now a werewolf" (allowedRevealModes: "OBSERVED,SENSED_SPECIAL")
-   ✗ Time passes / becomes nighttime (temporary scene detail)
-   ✗ Character walks to window (momentary action)
-   ✗ Room feels warm (ephemeral atmosphere)
-   ✗ Character seems nervous (temporary emotion)
-   
-1. EVENTS
-   What significant things happened in this exchange?
-   - Focus on: actions taken, discoveries made, conflicts that occurred, arrivals/departures
-   - Skip: minor emotional reactions, trivial details, things already implied by context
-   - Each event MUST be concise and fit within 280 characters
-   - If an event is too complex, either summarize it more or split it into multiple events
-   - Classify as: MAJOR (story-changing), MINOR (noteworthy), or DETAIL (flavor)
+1. FACT DISCOVERIES
+   - For NEW facts: Provide tempId (e.g., "discovery_1"), statement, truthValue, and allowedRevealModes.
+     * allowedRevealModes: null (publicly observable) or specific modes like "OBSERVED", "TOLD", "SENSED_SPECIAL"
+   - For EXISTING facts: Match to the 8-char hash in the registry using existingFactHash.
+   - List every character who learned it in discoveredBy with howLearned (OBSERVED, TOLD, INFERRED, SENSED_SPECIAL, DOCUMENTED).
 
-2. KNOWLEDGE TRANSFERS
-   Did any character learn new information?
-   - Only include if the narration explicitly shows them learning something
-   - Specify: who learned what, and how they learned it
-   - How learned can be: OBSERVED (saw it happen), TOLD (someone said it), INFERRED (figured it out)
-   - Do NOT include things a character already knows
-   - Keep "whatTheyLearned" concise (under 200 characters) - this is not a paragraph
-
+2. EVENTS
+   - Significant actions only. Keep descriptions under 280 characters.
+   - Significance levels:
+     * MAJOR (plot-critical, preserved forever)
+     * MINOR (important but not critical, deleted when beat ends)
+     
+   ⚠️ TONE-AWARE SIGNIFICANCE:
+   Consider the TONE when classifying events:
+   - In horror/dark genres: atmospheric changes, ominous details may be MAJOR
+   - In romance: relationship moments, confessions may be MAJOR
+   - In action: combat outcomes, escapes may be MAJOR
+   - Match extraction granularity to the established tone
+   
+   ⚠️ TIME-SENSITIVE URGENCY:
+   Consider TIME CONTEXT when assessing importance:
+   - Events near deadlines/critical moments = higher significance
+   - Reference world state for context (e.g., "full moon tonight" in werewolf story)
+   
+   ⚠️ RULE VIOLATIONS:
+   Consider WORLD RULES when identifying special moments:
+   - Rule-breaking events are typically MAJOR
+   - First-time magical moments in non-magical settings = MAJOR
+   - Supernatural reveals in mundane settings = MAJOR
+   
 3. SECRET REVELATIONS
-   Were any secrets exposed or suspected?
-   - Check the "doesNotKnow" lists in the character data above
-   - If a secret was revealed or hinted at, record: which secret, who now knows/suspects, how it happened
-   - State can be: KNOWS (fully revealed) or SUSPICIOUS (they suspect something)
-   - Keep "secretDescription" short and match it to the doesNotKnow list format
-   - Keep "howRevealed" concise (under 200 characters)
+   - Cross-reference the "doesNotKnow" lists in the character data above.
+   - Update state to KNOWS (fully revealed) or SUSPICIOUS (they suspect something).
+   - Keep descriptions brief and match the format in doesNotKnow lists.
 
 4. TENSION CHANGES
-   Did any existing tensions escalate, de-escalate, or resolve?
-   - Check the active tensions listed above
-   - Record: which tension changed, what happened to it, new pressure level (1-10)
-   - Change types: ESCALATED, DE_ESCALATED, RESOLVED, CREATED (for brand new tensions)
-   - Keep "tensionDescription" concise (under 400 characters) - brief but clear
-   - Keep "reason" brief (under 200 characters) - not a full explanation
+   - Update pressure (1-10) for existing tensions or use CREATED for new ones.
+   - Change types: ESCALATED, DE_ESCALATED, RESOLVED, CREATED
+   - Keep reasons under 200 characters.
+   
+      ⚠️ CONTEXT-AWARE PRESSURE:
+   Consider WORLD STATE and TIME when assessing new pressure levels:
+   - Approaching deadlines = higher pressure (e.g., "full moon in 1 hour")
+   - World state changes impact = pressure changes (e.g., "war declared" escalates existing tensions)
+   - Tone influences base pressure (horror tends toward higher baseline tension)
 
 5. CHARACTER APPEARANCES
-   Did any character's presence status change?
-   - Appeared: Someone who was "potential" or "background" is now actively in the scene
-   - Left: Someone who was "present" has departed
-   - Mentioned: Someone was referenced but is not physically present
-   - Keep "context" brief (under 200 characters) - just the key detail
+   - APPEARED: Status changed from "potential/background" to "present"
+   - LEFT: Character exited the scene
+   - MENTIONED: Referenced but not physically present
 
 ==========================================================
-RESPONSE FORMAT
+JSON STRUCTURE
 ==========================================================
-
-Respond ONLY with valid JSON in this exact structure. Do not include markdown code fences, explanations, or any text outside the JSON:
 
 {
   "events": [
     {
-      "description": "brief description of what happened",
-      "significance": "MAJOR" | "MINOR" | "DETAIL",
-      "charactersInvolved": ["character name", "another name"]
+      "description": "string",
+      "significance": "MAJOR|MINOR",
+      "charactersInvolved": ["string"]
     }
   ],
-  "facts": [
+  "factDiscoveries": [
     {
-      "statement": "The gift box contains a squeaky mouse that smells like cooked meat",
+      "tempId": "discovery_1",
+      "statement": "string",
       "truthValue": true,
-      "allowedRevealModes": "OBSERVED"
-    }
-  ],
-  "knowledgeTransfers": [
+      "allowedRevealModes": "string or null",
+      "discoveredBy": [{"characterName": "string", "howLearned": "string"}]
+    },
     {
-      "characterName": "name of character who learned something",
-      "whatTheyLearned": "description of NEW knowledge (omit if using existingFactHash)",
-      "existingFactHash": "8-char hash if this references an existing fact from registry",
-      "howLearned": "OBSERVED" | "TOLD" | "INFERRED"
+      "existingFactHash": "hash8char",
+      "discoveredBy": [{"characterName": "string", "howLearned": "string"}]
     }
   ],
   "secretRevelations": [
     {
-      "secretDescription": "which secret (match from doesNotKnow list)",
-      "characterName": "who discovered it",
-      "newState": "KNOWS" | "SUSPICIOUS",
-      "howRevealed": "description of how it was revealed"
+      "secretDescription": "string",
+      "characterName": "string",
+      "newState": "KNOWS|SUSPICIOUS",
+      "howRevealed": "string"
     }
   ],
   "tensionChanges": [
     {
-      "tensionDescription": "match from active tensions",
-      "changeType": "ESCALATED" | "DE_ESCALATED" | "RESOLVED" | "CREATED",
-      "newPressure": 5,
-      "reason": "what caused the change"
+      "tensionDescription": "string",
+      "changeType": "ESCALATED|DE_ESCALATED|RESOLVED|CREATED",
+      "newPressure": 7,
+      "reason": "string"
     }
   ],
   "characterAppearances": [
     {
-      "characterName": "name",
-      "changeType": "APPEARED" | "LEFT" | "MENTIONED",
-      "context": "brief context of the change"
+      "characterName": "string",
+      "changeType": "APPEARED|LEFT|MENTIONED",
+      "context": "string"
     }
   ]
 }
 
-IMPORTANT:
+==========================================================
+IMPORTANT NOTES
+==========================================================
+
 - If a category has no changes, use an empty array: []
-- Be conservative - only extract what is clearly shown in the narration
-- Character names must match exactly with the names in the CHARACTER list above
-- Tension descriptions should reference the active tensions listed above when possible
-- All JSON must be properly formatted with no trailing commas
-
-CHARACTER LIMITS (CRITICAL - READ CAREFULLY):
-
-STRICT LIMITS (will truncate if exceeded - avoid at all costs):
-- Event descriptions: 280 characters MAX
-  → If complex, split into 2-3 shorter events
-  → Example: "User found shell" + "Shell glowed when touched" (not one long paragraph)
-
-- Character names: 100 characters MAX
-  → Should never be an issue unless using very long descriptive names
-
-MODERATE LIMITS (aim to stay well under):
-- Knowledge transfers ("whatTheyLearned"): Keep under 200 characters
-  → Example: "User has supernatural abilities" (not "User has supernatural abilities that they inherited from their ancestor and can use to sense other supernatural creatures in the area")
-
-- Secret/tension descriptions: Keep under 300 characters
-  → Brief but clear
-  → Example: "Derek suspects user isn't fully human" (not a full paragraph)
-
-- Context/reason fields: Keep under 200 characters
-  → Just the key point, not elaborate explanations
-
-GENERAL PRINCIPLE:
-- These are DATABASE constraints, not suggestions
-- Truncation creates INCOMPLETE DATA that breaks the narrative continuity
-- When in doubt, be MORE concise or split into multiple entries
-- Quality over quantity - 3 clear short entries beat 1 truncated mess
+- Character names must match EXACTLY with names in CHARACTER list above
+- All text fields have strict length limits - stay well under to avoid truncation:
+  * Event descriptions: 280 characters maximum
+  * Fact statements: Keep concise (under 200 characters recommended)
+  * Reasons/contexts: Under 200 characters
+  * Secret/tension descriptions: Under 300 characters
+- Do NOT include markdown code fences (```json) or explanations
+- The response must be pure JSON that starts with { and ends with }

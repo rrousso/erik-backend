@@ -73,13 +73,6 @@ public class EventExtraction {
         return "MINOR".equalsIgnoreCase(significance);
     }
     
-    /**
-     * Check if this is a detail
-     */
-    public boolean isDetail() {
-        return "DETAIL".equalsIgnoreCase(significance);
-    }
-    
     @Override
     public String toString() {
         return String.format("EventExtraction[%s: %s]", significance, description);

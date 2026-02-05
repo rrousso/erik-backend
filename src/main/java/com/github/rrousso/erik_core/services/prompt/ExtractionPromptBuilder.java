@@ -65,6 +65,7 @@ public class ExtractionPromptBuilder {
         String tensionsSection = formatTensions(stanza);
         String recentEventsSection = formatRecentEvents(stanza);
         String factRegistrySection = formatFactRegistry(stanza);
+        String worldContextSection = formatWorldContext(stanza);
         
         // Replace placeholders in template
         String prompt = extractionTemplate
@@ -72,6 +73,7 @@ public class ExtractionPromptBuilder {
             .replace("{tensions}", tensionsSection)
             .replace("{recent_events}", recentEventsSection)
             .replace("{fact_registry}", factRegistrySection)
+            .replace("{world_context}", worldContextSection)
             .replace("{user_input}", userInput)
             .replace("{narrator_response}", narratorResponse);
         
@@ -295,6 +297,42 @@ public class ExtractionPromptBuilder {
                 sb.append("\n");
             }
             sb.append("\n");
+        }
+        
+        return sb.toString();
+    }
+    
+    /**
+     * Format world context (tone, time, state, rules)
+     */
+    private String formatWorldContext(Stanza stanza) {
+        StringBuilder sb = new StringBuilder();
+        
+        // Tone
+        if (stanza.getTone() != null && !stanza.getTone().isEmpty()) {
+            sb.append("Tone: ").append(stanza.getTone()).append("\n");
+        }
+        
+        // Time context
+        if (stanza.getTimeContext() != null && !stanza.getTimeContext().isEmpty()) {
+            sb.append("When: ").append(stanza.getTimeContext()).append("\n");
+        }
+        
+        // World state
+        if (stanza.getWorldState() != null && !stanza.getWorldState().isEmpty()) {
+            sb.append("Current World State: ").append(stanza.getWorldState()).append("\n");
+        }
+        
+        // World rules
+        if (stanza.getWorldRules() != null && stanza.getWorldRules().length > 0) {
+            sb.append("World Rules:\n");
+            for (String rule : stanza.getWorldRules()) {
+                sb.append("  - ").append(rule).append("\n");
+            }
+        }
+        
+        if (sb.length() == 0) {
+            return "[No world context defined]";
         }
         
         return sb.toString();

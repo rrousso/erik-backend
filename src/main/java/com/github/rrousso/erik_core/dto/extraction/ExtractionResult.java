@@ -20,8 +20,7 @@ import java.util.List;
 public class ExtractionResult {
     
     private List<EventExtraction> events = new ArrayList<>();
-    private List<FactEstablishment> facts = new ArrayList<>();
-    private List<KnowledgeTransfer> knowledgeTransfers = new ArrayList<>();
+    private List<FactDiscovery> factDiscoveries = new ArrayList<>();
     private List<SecretRevelation> secretRevelations = new ArrayList<>();
     private List<TensionChange> tensionChanges = new ArrayList<>();
     private List<CharacterAppearance> characterAppearances = new ArrayList<>();
@@ -40,20 +39,12 @@ public class ExtractionResult {
         this.events = events != null ? events : new ArrayList<>();
     }
     
-    public List<FactEstablishment> getFacts() {
-        return facts;
+    public List<FactDiscovery> getFactDiscoveries() {
+        return factDiscoveries;
     }
     
-    public void setFacts(List<FactEstablishment> facts) {
-        this.facts = facts != null ? facts : new ArrayList<>();
-    }
-    
-    public List<KnowledgeTransfer> getKnowledgeTransfers() {
-        return knowledgeTransfers;
-    }
-    
-    public void setKnowledgeTransfers(List<KnowledgeTransfer> knowledgeTransfers) {
-        this.knowledgeTransfers = knowledgeTransfers != null ? knowledgeTransfers : new ArrayList<>();
+    public void setFactDiscoveries(List<FactDiscovery> factDiscoveries) {
+        this.factDiscoveries = factDiscoveries != null ? factDiscoveries : new ArrayList<>();
     }
     
     public List<SecretRevelation> getSecretRevelations() {
@@ -86,9 +77,8 @@ public class ExtractionResult {
      * Check if any changes were extracted
      */
     public boolean hasAnyChanges() {
-        return !events.isEmpty()
-            || !facts.isEmpty()  // NEW
-            || !knowledgeTransfers.isEmpty() 
+        return !events.isEmpty() 
+            || !factDiscoveries.isEmpty()  
             || !secretRevelations.isEmpty()
             || !tensionChanges.isEmpty()
             || !characterAppearances.isEmpty();
@@ -98,9 +88,8 @@ public class ExtractionResult {
      * Get total count of all changes
      */
     public int getTotalChangeCount() {
-        return events.size()
-            + facts.size()  // NEW
-            + knowledgeTransfers.size() 
+        return events.size() 
+            + factDiscoveries.size()  
             + secretRevelations.size()
             + tensionChanges.size()
             + characterAppearances.size();
@@ -108,8 +97,8 @@ public class ExtractionResult {
     
     @Override
     public String toString() {
-        return String.format("ExtractionResult[events=%d, facts=%d, knowledge=%d, secrets=%d, tensions=%d, appearances=%d]",
-            events.size(), facts.size(), knowledgeTransfers.size(), secretRevelations.size(), 
+        return String.format("ExtractionResult[events=%d, factDiscoveries=%d, secrets=%d, tensions=%d, appearances=%d]",
+            events.size(),factDiscoveries.size(), secretRevelations.size(), 
             tensionChanges.size(), characterAppearances.size());
     }
     

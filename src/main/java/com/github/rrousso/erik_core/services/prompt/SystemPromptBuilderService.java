@@ -59,7 +59,6 @@ public class SystemPromptBuilderService {
         voidAbandonedDirective = promptLoader.load("erik/directive_abandoned.txt");
         voidPlanningDirective = promptLoader.load("erik/directive_planning.txt");
         stanzaModeNarrator = promptLoader.load("narrator/stanza_narrator.txt");
-        extractionPrompt = promptLoader.load("narrator/extraction_prompt.txt");
         quickSynopsisExtractionPrompt = promptLoader.load("analytical/quick_synopsis.txt");
         changeDistillerPrompt = promptLoader.load("analytical/changes_distiller.txt");
         flagDetectionPrompt = promptLoader.load("analytical/flag_detection.txt"); 
@@ -317,17 +316,30 @@ public class SystemPromptBuilderService {
         PromptComposer composer = new PromptComposer()
             .section(voidPausedDirective);
         
-        // Use getNarratorContext() for paused stanza context too
+        // Get narrator context from DB - this is the CURRENT state, not "original setup"
         String narratorContext = context.getNarratorContext();
         if (narratorContext != null && !narratorContext.isEmpty()) {
             composer
                 .divider()
-                .section("## Paused Stanza Context")
-                .labeledSection("**Original Setup:**", narratorContext);
-         
+                .section("## Paused Stanza - Current State");
+            
+            // Add synopsis if available (compressed history)
             if (context.hasSynopsis()) {
-                composer.labeledSection("**What happened so far:**", context.getSynopsis());
+                composer
+                    .wrappedLabeledSection("STORY SO FAR:", context.getSynopsis());
             }
+            
+            // Add recent exchanges (immediate context of where we paused)
+            if (context.hasRecentExchanges()) {
+                composer
+                    .labeledSection("RECENT EXCHANGES (where we paused):", context.getRecentExchanges());
+            }
+            
+            // Add full current state from database
+            composer
+                .divider()
+                .section("## Current World State")
+                .section(narratorContext);
         }
         
         return composer.build();

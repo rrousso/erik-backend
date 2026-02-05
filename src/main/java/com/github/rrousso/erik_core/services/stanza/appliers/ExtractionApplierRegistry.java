@@ -8,8 +8,7 @@ import org.springframework.stereotype.Component;
 
 import com.github.rrousso.erik_core.dto.extraction.CharacterAppearance;
 import com.github.rrousso.erik_core.dto.extraction.EventExtraction;
-import com.github.rrousso.erik_core.dto.extraction.FactEstablishment;
-import com.github.rrousso.erik_core.dto.extraction.KnowledgeTransfer;
+import com.github.rrousso.erik_core.dto.extraction.FactDiscovery;
 import com.github.rrousso.erik_core.dto.extraction.SecretRevelation;
 import com.github.rrousso.erik_core.dto.extraction.TensionChange;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
@@ -44,27 +43,24 @@ public class ExtractionApplierRegistry {
     
     // Individual appliers injected by Spring
     private final EventApplier eventApplier;
-    private final FactEstablishmentApplier factEstablishmentApplier;
-    private final KnowledgeTransferApplier knowledgeTransferApplier;
+    private final FactDiscoveryApplier factDiscoveryApplier;
     private final SecretRevelationApplier secretRevelationApplier;
     private final TensionChangeApplier tensionChangeApplier;
     private final CharacterAppearanceApplier characterAppearanceApplier;
     
     public ExtractionApplierRegistry(
             EventApplier eventApplier,
-            FactEstablishmentApplier factEstablishmentApplier,
-            KnowledgeTransferApplier knowledgeTransferApplier,
+            FactDiscoveryApplier factDiscoveryApplier,  
             SecretRevelationApplier secretRevelationApplier,
             TensionChangeApplier tensionChangeApplier,
             CharacterAppearanceApplier characterAppearanceApplier) {
         this.eventApplier = eventApplier;
-        this.factEstablishmentApplier = factEstablishmentApplier;
-        this.knowledgeTransferApplier = knowledgeTransferApplier;
+        this.factDiscoveryApplier = factDiscoveryApplier; 
         this.secretRevelationApplier = secretRevelationApplier;
         this.tensionChangeApplier = tensionChangeApplier;
         this.characterAppearanceApplier = characterAppearanceApplier;
         
-        log.info("ExtractionApplierRegistry initialized with {} applier types", 6);
+        log.info("ExtractionApplierRegistry initialized with {} applier types", 7);
     }
     
     /**
@@ -92,43 +88,29 @@ public class ExtractionApplierRegistry {
     }
     
     /**
-     * Apply a list of fact establishments.
+     * Apply a list of fact discoveries.
      * 
-     * Creates new facts in the world that exist but may not be known by characters yet.
+     * Each discovery combines fact creation with immediate knowledge transfer.
+     * This is the primary way facts should be created during extraction.
      */
-    public void applyFactEstablishments(Stanza stanza, List<FactEstablishment> establishments) {
-        if (establishments == null || establishments.isEmpty()) {
+    public void applyFactDiscoveries(Stanza stanza, List<FactDiscovery> discoveries) {
+        if (discoveries == null || discoveries.isEmpty()) {
             return;
         }
         
-        log.info("[ExtractionApplierRegistry] Applying {} fact establishments", establishments.size());
+        log.info("[ExtractionApplierRegistry] Applying {} fact discoveries", discoveries.size());
         
-        for (FactEstablishment establishment : establishments) {
+        for (FactDiscovery discovery : discoveries) {
             try {
-                factEstablishmentApplier.apply(stanza, establishment);
+                factDiscoveryApplier.apply(stanza, discovery);
             } catch (Exception e) {
-                log.error("[ExtractionApplierRegistry] Failed to apply fact establishment: {}", 
-                    establishment.getStatement(), e);
-                // Continue with remaining establishments
+                log.error("[ExtractionApplierRegistry] Failed to apply fact discovery: {}", 
+                    discovery, e);
+                // Continue with remaining discoveries
             }
         }
-    }
-    
-    /**
-     * Apply a list of knowledge transfer extractions.
-     */
-    public void applyKnowledgeTransfers(Stanza stanza, List<KnowledgeTransfer> transfers) {
-        if (transfers == null || transfers.isEmpty()) {
-            return;
-        }
         
-        log.info("[ExtractionApplierRegistry] Applying {} knowledge transfers", transfers.size());
-        
-        for (KnowledgeTransfer transfer : transfers) {
-            knowledgeTransferApplier.apply(stanza, transfer);
-        }
-        
-        log.debug("[ExtractionApplierRegistry] Successfully applied {} knowledge transfers", transfers.size());
+        log.debug("[ExtractionApplierRegistry] Successfully applied {} fact discoveries", discoveries.size());
     }
     
     /**

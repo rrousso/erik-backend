@@ -479,6 +479,10 @@ public class Stanza {
             sb.append("**When:** ").append(timeContext).append("\n\n");
         }
         
+        if (tone != null && !tone.isEmpty()) {
+            sb.append("**Tone:**\n").append(tone).append("\n\n");
+        }
+        
         if (worldState != null && !worldState.isEmpty()) {
             sb.append("**Current World State:**\n").append(worldState).append("\n\n");
         }
