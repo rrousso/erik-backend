@@ -202,20 +202,35 @@ public class SynopsisGeneratorService {
     
     /**
      * Generate quick synopsis using template.
-     * Uses synopsis + currentHistory for complete context.
+     * Uses beat summaries + rolling synopsis + current messages for complete context.
+     * 
+     * @param history Conversation history (for rolling synopsis + recent messages)
+     * @param stanza Stanza entity (for beat summaries)
      */
-    public String generateQuickSynopsis(ConversationHistory history) throws Exception {
+    public String generateQuickSynopsis(ConversationHistory history, Stanza stanza) throws Exception {
         
-        String synopsis = history.getSynopsis();
+        // 1. Get completed beat summaries (reuses Stanza's existing formatter)
+        String beatSummaries = stanza.formatCompletedBeatSummaries();
+        if (beatSummaries.isEmpty()) {
+            beatSummaries = "[No completed beats - this is the opening beat]";
+        }
+        
+        // 2. Get rolling synopsis (current beat's compressed exchanges)
+        String rollingSynopsis = history.getSynopsis();
+        
+        // 3. Get recent raw messages
         String recentMessages = formatMessagesAsText(history.getAllMessages(), true);
         
-        log.info("[QuickSynopsis] Using synopsis (" + synopsis.length() + " chars) + " +
-                "recent messages (" + history.getAllMessages().size() + " messages)");
+        log.info("[QuickSynopsis] Using {} completed beats + rolling synopsis ({} chars) + {} recent messages", 
+            stanza.getCompletedBeats().size(),
+            rollingSynopsis.length(),
+            history.getAllMessages().size());
         
         // Get template and fill it in
         String template = promptBuilder.buildQuickSynopsisPrompt(personaService.getUserPersona());
         String filledPrompt = template
-            .replace("${previousSnapshot}", synopsis.isEmpty() ? "[Start of stanza]" : synopsis)
+            .replace("${beatSummaries}", beatSummaries)
+            .replace("${rollingSynopsis}", rollingSynopsis.isEmpty() ? "[No synopsis]" : rollingSynopsis)
             .replace("${conversationText}", recentMessages);
         
         log.info("[QuickSynopsis] Generating quick synopsis...");

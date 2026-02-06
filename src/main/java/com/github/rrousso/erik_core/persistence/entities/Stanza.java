@@ -350,28 +350,10 @@ public class Stanza {
         }
         
         // 1. COMPLETED BEATS (Summary)
-        List<Beat> completedBeats = getCompletedBeats();
-        if (!completedBeats.isEmpty()) {
+        String beatSummaries = formatCompletedBeatSummaries();
+        if (!beatSummaries.isEmpty()) {
             sb.append("=== PREVIOUS BEATS (Summary) ===\n\n");
-            for (Beat beat : completedBeats) {
-                sb.append("Beat ").append(beat.getBeatNumber());
-                
-                String context = beat.getTransitionContext();
-                if (context != null && !context.isEmpty()) {
-                    sb.append(" - ").append(context);
-                }
-                
-                sb.append(" (Exchanges ").append(beat.getStartExchange())
-                  .append("-").append(beat.getEndExchange()).append(")\n\n");
-                
-                if (beat.getSummary() != null && !beat.getSummary().isEmpty()) {
-                    sb.append(beat.getSummary()).append("\n\n");
-                } else {
-                    sb.append("[Summary not yet generated]\n\n");
-                }
-                
-                sb.append("---\n\n");
-            }
+            sb.append(beatSummaries);
         }
         
         // 2. CURRENT BEAT (Active)
@@ -424,22 +406,9 @@ public class Stanza {
             for (StanzaCharacter c : present) {
                 if (c.isUser()) continue; // Skip user, already shown above
                 
-                sb.append("**").append(c.getName().toUpperCase()).append("**\n");
-                if (c.getCanonRole() != null && !c.getCanonRole().isEmpty()) {
-                    sb.append("Role: ").append(c.getCanonRole()).append("\n");
-                }
-                if (c.getRelationshipToUser() != null && !c.getRelationshipToUser().isEmpty()) {
-                    sb.append("Relationship to User: ").append(c.getRelationshipToUser()).append("\n");
-                }
-                if (c.getEmotionalState() != null && !c.getEmotionalState().isEmpty()) {
-                    sb.append("Emotional State: ").append(c.getEmotionalState()).append("\n");
-                }
-                if (c.getGoals() != null && !(c.getGoals().length > 0)) {
-                    sb.append("Goals: ").append(c.getGoals()).append("\n");
-                }
-                
-                sb.append(c.formatBlueprintForNarrator());
+                // toNarratorContext() handles all character info including blueprint and knowledge
                 sb.append(c.toNarratorContext(restrictedFacts));
+                sb.append(c.formatBlueprintForNarrator());
                 sb.append("\n---\n\n");
             }
         }
@@ -542,6 +511,43 @@ public class Stanza {
                   .append(fact.getPredicate()).append("\n");
             }
             sb.append("\n");
+        }
+        
+        return sb.toString();
+    }
+    
+    /**
+     * Format completed beat summaries as plain text.
+     * Reusable for narrator prompts, extraction prompts, and synopsis generation.
+     * 
+     * @return Formatted beat summaries, or empty string if no completed beats
+     */
+    public String formatCompletedBeatSummaries() {
+        List<Beat> completedBeats = getCompletedBeats();
+        
+        if (completedBeats.isEmpty()) {
+            return "";
+        }
+        
+        StringBuilder sb = new StringBuilder();
+        for (Beat beat : completedBeats) {
+            sb.append("Beat ").append(beat.getBeatNumber());
+            
+            String context = beat.getTransitionContext();
+            if (context != null && !context.isEmpty()) {
+                sb.append(" - ").append(context);
+            }
+            
+            sb.append(" (Exchanges ").append(beat.getStartExchange())
+              .append("-").append(beat.getEndExchange()).append(")\n\n");
+            
+            if (beat.getSummary() != null && !beat.getSummary().isEmpty()) {
+                sb.append(beat.getSummary()).append("\n\n");
+            } else {
+                sb.append("[Summary not yet generated]\n\n");
+            }
+            
+            sb.append("---\n\n");
         }
         
         return sb.toString();

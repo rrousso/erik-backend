@@ -6,7 +6,9 @@ import org.springframework.stereotype.Service;
 
 import com.github.rrousso.erik_core.domain.models.SessionState;
 import com.github.rrousso.erik_core.domain.valueobjects.CompletedStanza;
+import com.github.rrousso.erik_core.persistence.entities.Stanza;
 import com.github.rrousso.erik_core.services.session.SynopsisGeneratorService;
+import com.github.rrousso.erik_core.services.stanza.StanzaPersistenceService;
 
 /**
  * Service for creating CompletedStanza objects when a stanza ends or is abandoned.
@@ -24,9 +26,13 @@ public class StanzaCompletionService {
     private static final Logger log = LoggerFactory.getLogger(StanzaCompletionService.class);
     
     private final SynopsisGeneratorService synopsisGenerator;
+    private final StanzaPersistenceService stanzaPersistenceService;
     
-    public StanzaCompletionService(SynopsisGeneratorService synopsisGenerator) {
+    public StanzaCompletionService(
+            SynopsisGeneratorService synopsisGenerator,
+            StanzaPersistenceService stanzaPersistenceService) {
         this.synopsisGenerator = synopsisGenerator;
+        this.stanzaPersistenceService = stanzaPersistenceService;
     }
     
     /**
@@ -44,7 +50,18 @@ public class StanzaCompletionService {
         String quickSynopsis = "";
         
         try {
-            quickSynopsis = synopsisGenerator.generateQuickSynopsis(state.getStanzaHistory());
+            // Load stanza from database to get beat summaries
+            Long stanzaId = state.getActiveStanzaId();
+            if (stanzaId != null) {
+                Stanza stanza = stanzaPersistenceService.loadStanzaWithRelationships(stanzaId);
+                if (stanza != null) {
+                    quickSynopsis = synopsisGenerator.generateQuickSynopsis(state.getStanzaHistory(), stanza);
+                } else {
+                    log.warn("[StanzaCompletion] Could not load stanza {} for quick synopsis", stanzaId);
+                }
+            } else {
+                log.warn("[StanzaCompletion] No active stanza ID for quick synopsis");
+            }
         } catch (Exception e) {
             log.error("Failed to generate quick synopsis", e);
             // Continue with empty synopsis rather than failing
