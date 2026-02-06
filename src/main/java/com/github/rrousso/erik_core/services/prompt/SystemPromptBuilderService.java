@@ -43,7 +43,7 @@ public class SystemPromptBuilderService {
     private String quickSynopsisExtractionPrompt;
     private String changeDistillerPrompt;
     private String flagDetectionPrompt;
-    private String worldSnapshotSynopsis;
+    private String rollingSynopsisPrompt;
     
     public SystemPromptBuilderService(PromptLoaderService promptLoader) {
         this.promptLoader = promptLoader;
@@ -62,8 +62,8 @@ public class SystemPromptBuilderService {
         quickSynopsisExtractionPrompt = promptLoader.load("analytical/quick_synopsis.txt");
         changeDistillerPrompt = promptLoader.load("analytical/changes_distiller.txt");
         flagDetectionPrompt = promptLoader.load("analytical/flag_detection.txt"); 
-        worldSnapshotSynopsis = promptLoader.load("analytical/world_snapshot_synopsis.txt"); 
-        System.out.println("[System] Prompts loaded successfully");
+        rollingSynopsisPrompt = promptLoader.load("analytical/rolling_synopsis.txt");
+        System.out.println("[System] Prompts loaded successfully"); 
         
         // Initialize prompts directory
         initializePromptsDirectory();
@@ -106,13 +106,13 @@ public class SystemPromptBuilderService {
         return flagDetectionPrompt;
     }
     
-    public String buildWorldSnapshotPrompt(String persona) {
+    public String buildRollingSynopsisPrompt(String persona) {
         StringBuilder prompt = new StringBuilder();
         
         prompt.append(persona);
         prompt.append("\n\n---\n\n");
         
-        prompt.append(worldSnapshotSynopsis);
+        prompt.append(rollingSynopsisPrompt);
         
         return prompt.toString();
     }

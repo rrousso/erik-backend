@@ -124,13 +124,13 @@ public class SynopsisGeneratorService {
         log.info("[Synopsis] Previous synopsis ({} chars)", previousSynopsis.length());
         
         // Get template and fill it in
-        String template = promptBuilder.buildWorldSnapshotPrompt(personaService.getUserPersona());
+        String template = promptBuilder.buildRollingSynopsisPrompt(personaService.getUserPersona());
         String filledPrompt = template
             .replace("${previousSnapshot}", previousSynopsis)
             .replace("${extractedEvents}", eventsText)
             .replace("${recentExchanges}", recentExchangesText);
         
-        log.info("[System] Generating rolling synopsis using world_snapshot template (events-based)...");
+        log.info("[System] Generating rolling synopsis using rolling_synopsis template (events-based)...");
         
         // Use ANALYTICAL model
         String newSynopsis = llmClient.call(

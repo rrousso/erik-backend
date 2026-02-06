@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import com.github.rrousso.erik_core.dto.extraction.BlueprintUpdate;
 import com.github.rrousso.erik_core.dto.extraction.CharacterAppearance;
 import com.github.rrousso.erik_core.dto.extraction.EventExtraction;
 import com.github.rrousso.erik_core.dto.extraction.FactDiscovery;
@@ -47,18 +48,21 @@ public class ExtractionApplierRegistry {
     private final SecretRevelationApplier secretRevelationApplier;
     private final TensionChangeApplier tensionChangeApplier;
     private final CharacterAppearanceApplier characterAppearanceApplier;
+    private final BlueprintUpdateApplier blueprintUpdateApplier;
     
     public ExtractionApplierRegistry(
             EventApplier eventApplier,
             FactDiscoveryApplier factDiscoveryApplier,  
             SecretRevelationApplier secretRevelationApplier,
             TensionChangeApplier tensionChangeApplier,
-            CharacterAppearanceApplier characterAppearanceApplier) {
+            CharacterAppearanceApplier characterAppearanceApplier,
+            BlueprintUpdateApplier blueprintUpdateApplier) {
         this.eventApplier = eventApplier;
         this.factDiscoveryApplier = factDiscoveryApplier; 
         this.secretRevelationApplier = secretRevelationApplier;
         this.tensionChangeApplier = tensionChangeApplier;
         this.characterAppearanceApplier = characterAppearanceApplier;
+		this.blueprintUpdateApplier = blueprintUpdateApplier;
         
         log.info("ExtractionApplierRegistry initialized with {} applier types", 7);
     }
@@ -168,5 +172,22 @@ public class ExtractionApplierRegistry {
         }
         
         log.debug("[ExtractionApplierRegistry] Successfully applied {} character appearances", appearances.size());
+    }
+    
+    /**
+     * Apply a list of blueprint/visual appearance updates.
+     */
+    public void applyBlueprintUpdates(Stanza stanza, List<BlueprintUpdate> updates) {
+        if (updates == null || updates.isEmpty()) {
+            return;
+        }
+        
+        log.info("[ExtractionApplierRegistry] Applying {} blueprint updates", updates.size());
+        
+        for (BlueprintUpdate update : updates) {
+            blueprintUpdateApplier.apply(stanza, update);
+        }
+        
+        log.debug("[ExtractionApplierRegistry] Successfully applied {} blueprint updates", updates.size());
     }
 }

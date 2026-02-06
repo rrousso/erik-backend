@@ -55,11 +55,8 @@ public class CharacterAppearanceApplier implements ExtractionApplier<CharacterAp
                 MAX_CONTEXT_LENGTH);
         }
         
-        // Find character (or create if emergent)
-        Optional<StanzaCharacter> charOpt = 
-            stanza.getCharacters().stream()
-                .filter(c -> c.getName().equalsIgnoreCase(appearance.getCharacterName()))
-                .findFirst();
+        // Find character (or create if emergent)        
+        Optional<StanzaCharacter> charOpt = stanza.findCharacterByName(appearance.getCharacterName());
         
         StanzaCharacter character;
         

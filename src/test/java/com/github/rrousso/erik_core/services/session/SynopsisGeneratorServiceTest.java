@@ -62,7 +62,7 @@ public class SynopsisGeneratorServiceTest {
 		
 		when(personaService.getUserPersona()).thenReturn("Persona String");
 		
-    	when(promptBuilder.buildWorldSnapshotPrompt(personaService.getUserPersona()))
+    	when(promptBuilder.buildRollingSynopsisPrompt(personaService.getUserPersona()))
         .thenReturn("Mock prompt template");
     	
         when(llmClient.call(
@@ -125,6 +125,10 @@ public class SynopsisGeneratorServiceTest {
     	history.addUserMessage("I do that.");
     	history.addAssistantMessage("And here are the consequences!");
     	
+    	// Mock stanza methods needed by generateQuickSynopsis
+    	when(mockStanza.formatCompletedBeatSummaries()).thenReturn("Beat 1 summary\n\nBeat 2 summary");
+    	when(mockStanza.getCompletedBeats()).thenReturn(java.util.Collections.emptyList());
+    	
     	when(personaService.getUserPersona()).thenReturn("Persona String");
     	
     	when(promptBuilder.buildQuickSynopsisPrompt(personaService.getUserPersona()))
@@ -136,7 +140,7 @@ public class SynopsisGeneratorServiceTest {
                 anyString()
             )).thenReturn("This is a very short synopsis for the user");
         
-        String quickSynopsis = generator.generateQuickSynopsis(history);
+        String quickSynopsis = generator.generateQuickSynopsis(history, mockStanza);
         
         assertEquals("This is a very short synopsis for the user", quickSynopsis);
 	}
@@ -191,7 +195,7 @@ public class SynopsisGeneratorServiceTest {
 	    when(synopsisConfig.getThresholdSize()).thenReturn(4);
 	    when(synopsisConfig.getWindowSize()).thenReturn(2);
 	    when(personaService.getUserPersona()).thenReturn("Persona String");
-	    when(promptBuilder.buildWorldSnapshotPrompt(personaService.getUserPersona())).thenReturn("prompt");
+	    when(promptBuilder.buildRollingSynopsisPrompt(personaService.getUserPersona())).thenReturn("prompt");
 	    
 	    when(llmClient.call(eq(ModelType.ANALYTICAL), anyString(), anyString()))
 	        .thenThrow(new RuntimeException("API Error"));

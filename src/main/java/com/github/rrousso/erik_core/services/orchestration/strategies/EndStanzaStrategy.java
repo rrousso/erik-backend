@@ -47,7 +47,8 @@ public class EndStanzaStrategy implements FlowStrategy {
         this.persistenceService = persistenceService;
         this.extractionService = extractionService;
     }
-
+    
+    
     @Override
     public String execute(String userInput, SessionState state) {
         // Validation: Check if in void mode
@@ -66,57 +67,40 @@ public class EndStanzaStrategy implements FlowStrategy {
             builder.append("\n[Narration - Closing] ");
             builder.append(closure);
         
-            // Transition to void mode
-            state.enterVoidMode();
-            
-            // Create completed stanza record
-            CompletedStanza completed = completionService.createCompletedStanza(state);
-            state.setCompletedStanza(completed);
-            state.setStanzaStatus(StanzaStatus.COMPLETED);
-            
-            // Update database with final state
             Long stanzaId = state.getActiveStanzaId();
+            
             if (stanzaId != null) {
                 try {
                     Stanza stanza = persistenceService.loadStanzaWithRelationships(stanzaId);
-                    
-                    // Increment exchange count for final narration
                     stanza.incrementExchange();
                     
-                 // Process final extraction (service decides based on config)
+                    // Final extraction BEFORE synopsis (history still has messages)
                     ConversationHistory history = state.getStanzaHistory();
                     int exchangeNumber = stanza.getCurrentExchange();
-                    boolean isFinalExchange = true;
-                    boolean isFirstExchange = false;
-
-                    boolean extracted = extractionService.processExtraction(
-                        stanza, history, exchangeNumber, isFirstExchange, isFinalExchange);
-
-                    if (extracted) {
-                        log.debug("[EndStanzaStrategy] Final extraction completed for exchange {}", exchangeNumber);
-                    } else {
-                        log.debug("[EndStanzaStrategy] Final extraction skipped per configuration");
-                    }
+                    extractionService.processExtraction(
+                        stanza, history, exchangeNumber, false, true);
                     
-                    // Mark as completed
-                    stanza.setStatus("completed");
-                    
-                    // Store quick synopsis
-                    stanza.setQuickSynopsis(completed.getQuickSynopsis());
+                    // Synopsis + completion (clears history as side effect)
+                    state.enterVoidMode();
+                    CompletedStanza completed = completionService.createCompletedStanza(state);
+                    state.setCompletedStanza(completed);
+                    state.setStanzaStatus(StanzaStatus.COMPLETED);
                     
                     // Single database write
+                    stanza.setStatus("completed");
+                    stanza.setQuickSynopsis(completed.getQuickSynopsis());
                     persistenceService.save(stanza);
+                    
+                    // Display completion messages
+                    builder.append("\n\n[STANZA END]\n");
+                    builder.append("\n[System] Here's the quick synopsis:\n");
+                    builder.append(completed.getQuickSynopsis());
+                    builder.append("\n");
                     
                 } catch (Exception e) {
                     log.warn("Failed to update completed stanza in database", e);
                 }
             }
-            
-            // Display completion messages
-            builder.append("\n\n[STANZA END]\n");
-            builder.append("\n[System] Here's the quick synopsis:\n");
-            builder.append(completed.getQuickSynopsis());
-            builder.append("\n");
             
             // Get Erik's reflection
             try {
@@ -128,6 +112,10 @@ public class EndStanzaStrategy implements FlowStrategy {
             } catch (Exception e) {
                 log.warn("Failed to get Erik's reflection on stanza end", e);
             }
+            
+            // Clean up state
+            state.setInitializedStanza(null);
+            state.setActiveStanzaId(null);
             
             log.info("Stanza ended successfully");
             return builder.toString();

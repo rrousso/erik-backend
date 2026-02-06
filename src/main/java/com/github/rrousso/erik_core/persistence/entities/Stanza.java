@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.hibernate.annotations.CreationTimestamp;
@@ -551,6 +552,51 @@ public class Stanza {
         }
         
         return sb.toString();
+    }
+    
+    /**
+     * Find a character by name with fuzzy matching.
+     * 
+     * Matching priority:
+     * 1. Exact match (case-insensitive)
+     * 2. DB name starts with the search name (e.g., "Rafael" matches "Rafael DeSantis")
+     * 3. Search name starts with DB name (e.g., "Rafael DeSantis" matches "Rafael")
+     * 
+     * Returns empty if no match or if multiple ambiguous matches at the same priority level.
+     */
+    public Optional<StanzaCharacter> findCharacterByName(String name) {
+        if (name == null || name.isBlank()) {
+            return Optional.empty();
+        }
+        
+        String searchLower = name.trim().toLowerCase();
+        
+        // Priority 1: Exact match
+        for (StanzaCharacter c : characters) {
+            if (c.getName().equalsIgnoreCase(searchLower)) {
+                return Optional.of(c);
+            }
+        }
+        
+        // Priority 2: DB name starts with search name (e.g., "Rafael" → "Rafael DeSantis")
+        List<StanzaCharacter> startsWith = characters.stream()
+            .filter(c -> c.getName().toLowerCase().startsWith(searchLower))
+            .toList();
+        
+        if (startsWith.size() == 1) {
+            return Optional.of(startsWith.get(0));
+        }
+        
+        // Priority 3: Search name starts with DB name (e.g., "Rafael DeSantis" → "Rafael")
+        List<StanzaCharacter> reverseMatch = characters.stream()
+            .filter(c -> searchLower.startsWith(c.getName().toLowerCase()))
+            .toList();
+        
+        if (reverseMatch.size() == 1) {
+            return Optional.of(reverseMatch.get(0));
+        }
+        
+        return Optional.empty();
     }
     
     // === GETTERS AND SETTERS ===

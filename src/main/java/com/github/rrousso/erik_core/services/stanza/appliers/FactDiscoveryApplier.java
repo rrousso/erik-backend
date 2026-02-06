@@ -145,9 +145,7 @@ public class FactDiscoveryApplier implements ExtractionApplier<FactDiscovery> {
      */
     private boolean linkCharacterToFact(Stanza stanza, CharacterDiscovery charDiscovery, Fact fact) {
         // Find character
-        Optional<StanzaCharacter> charOpt = stanza.getCharacters().stream()
-            .filter(c -> c.getName().equalsIgnoreCase(charDiscovery.getCharacterName()))
-            .findFirst();
+    	Optional<StanzaCharacter> charOpt = stanza.findCharacterByName(charDiscovery.getCharacterName());
         
         if (!charOpt.isPresent()) {
             log.warn("[FactDiscoveryApplier] Character '{}' not found - skipping knowledge link",

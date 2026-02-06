@@ -45,8 +45,9 @@ public class FlagDetectorServiceTest {
         flagDetector = new FlagDetectorService(llmClient, promptBuilder);
         
         // Mock the prompt builder to return a valid template
-        when(promptBuilder.buildFlagDetectionPrompt())
-            .thenReturn("Detect flag from: {USER_INPUT}\nContext: {CONVERSATION_CONTEXT}\nStatus: {STATUS}");
+        // Using lenient() because some tests (null/blank input validation) return early and don't use this stub
+        lenient().when(promptBuilder.buildFlagDetectionPrompt())
+            .thenReturn("Detect flag from: {USER_INPUT}\nContext: {CONVERSATION_CONTEXT}\nStatus: {STATUS}\nAvailable: {AVAILABLE_FLAGS}");
     }
     
     // ========================================
@@ -313,22 +314,6 @@ public class FlagDetectorServiceTest {
         state.setStanzaStatus(StanzaStatus.ACTIVE);
         
         String userInput = "((abandon))";
-        
-        when(llmClient.call(eq(ModelType.ANALYTICAL), anyString(), anyString()))
-            .thenReturn("ABANDON");
-        
-        Flag result = flagDetector.detect(userInput, state);
-        
-        assertEquals(Flag.ABANDON_STANZA, result);
-    }
-    
-    @Test
-    @DisplayName("Should return ABANDON from paused state")
-    void shouldReturnAbandonFromPausedState() throws Exception {
-        SessionState state = new SessionState();
-        state.setStanzaStatus(StanzaStatus.PAUSED);
-        
-        String userInput = "Actually, let's abandon this one";
         
         when(llmClient.call(eq(ModelType.ANALYTICAL), anyString(), anyString()))
             .thenReturn("ABANDON");

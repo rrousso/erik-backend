@@ -159,6 +159,7 @@ public class StanzaExtractionService {
             applierRegistry.applySecretRevelations(stanza, result.getSecretRevelations());
             applierRegistry.applyTensionChanges(stanza, result.getTensionChanges());
             applierRegistry.applyCharacterAppearances(stanza, result.getCharacterAppearances());
+            applierRegistry.applyBlueprintUpdates(stanza, result.getBlueprintUpdates());
             
             log.info("[Extraction] Successfully applied all changes");
             return true;

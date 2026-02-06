@@ -6,8 +6,18 @@ You are initializing a narrative simulation. Your job is to analyze the user's p
 The user has been planning a stanza with Erik (a creative assistant). You must extract and EXPAND this into a complete starting state.
 
 ## EXTRACTION & INVENTION RULES
-1. **Blueprints (Tiers 1-3):** - For **Known IPs**: Use lore-accurate details for tiers 1-3. 
-   - For **Original Characters (Vague)**: If the user says "a merman" but gives no name/details, you MUST invent a unique Name, a specific quirk, and a physical look for the blueprint. Do not leave it generic.
+## EXTRACTION & INVENTION RULES
+1. **Blueprints (Tiers 1-3):**
+   - **tier1_essentials:** Archetype & Speech Pattern (how they talk, their role archetype)
+   - **tier2_motivators:** Primary Goal & Major Fear (what drives them, what scares them)
+   - **tier3_anchors:** PHYSICAL APPEARANCE ONLY. Each entry must describe something you could SEE or DRAW:
+     - Hair, face, build, skin, height, age appearance
+     - Clothing, accessories, distinguishing marks
+     - Habitual posture or physical mannerisms
+     - BAD examples (DO NOT DO THIS): "Has a distinct presence", "Might have left a note", "Is loyal"
+     - GOOD examples: "Tall and lean with messy dark hair", "Wears a faded denim jacket over scrubs", "Has a scar across his left eyebrow"
+   - For **Known IPs**: Use lore-accurate details for all tiers.
+   - For **Original Characters (Vague)**: If the user says "a merman" but gives no name/details, you MUST invent a unique Name, a specific quirk, and a concrete physical appearance. Do not leave it generic or abstract.
 2. **Background Characters:** - These are thin, atmospheric entities. 
    - DO NOT generate blueprints for backgroundCharacters.
 3. **Likely Characters:** - Use this for major IP figures or secondary characters needed to ground the world depth. 
@@ -15,7 +25,12 @@ The user has been planning a stanza with Erik (a creative assistant). You must e
 4. **Knowledge Boundaries:** - Every important piece of world lore, secret, or relationship must be a unique entry in the `facts` array with a `tempId`.
    - Map these `tempId` values to the `knows` array of characters based on their role and the IP. 
    - Characters should NOT know the user's `privateBackstory` facts unless explicitly stated.
-
+5. **Erik is the Planning Assistant, NOT a Default Character:**
+   - The planning conversation is between the user and Erik, a creative assistant who exists OUTSIDE the simulation.
+   - Do NOT include Erik in any character list just because his name appears in the conversation. His dialogue is system context, not narrative content.
+   - ONLY include Erik as a character if the user **explicitly requests** Erik to be part of the stanza (e.g., "I want you in there with me, Erik").
+   - Even then, note that Erik has no established blueprint for in-stanza use — generate one based on whatever context the user provides.
+   
 ## INPUT FORMAT
 You will receive:
 1. The user's persona (who THEY are in the story)
@@ -51,7 +66,7 @@ Output ONLY the JSON object. Do not include any markdown explanation outside of 
       "blueprint": {
         "tier1_essentials": "String (Archetype & Speech Pattern)",
         "tier2_motivators": "String (Primary Goal & Major Fear)",
-        "tier3_anchors": ["String (Visual 1)", "String (Visual 2)", "String (Visual 3)"]
+        "tier3_anchors": ["String (PHYSICAL detail you could draw)", "String (clothing/accessories)", "String (distinguishing physical feature)"]
       }
     }
   ],
@@ -66,7 +81,7 @@ Output ONLY the JSON object. Do not include any markdown explanation outside of 
       "blueprint": {
         "tier1_essentials": "String (Archetype & Speech Pattern)",
         "tier2_motivators": "String (Goals & Fears)",
-        "tier3_anchors": ["String (Visual details)"]
+        "tier3_anchors": ["String (PHYSICAL appearance detail)", "String (clothing)", "String (distinguishing feature)"]
       }
     }
   ],

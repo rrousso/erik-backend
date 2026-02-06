@@ -51,9 +51,7 @@ public class SecretRevelationApplier implements ExtractionApplier<SecretRevelati
         }
         
         // 1. Find the character
-        Optional<StanzaCharacter> charOpt = stanza.getCharacters().stream()
-                .filter(c -> c.getName().equalsIgnoreCase(revelation.getCharacterName()))
-                .findFirst();
+        Optional<StanzaCharacter> charOpt = stanza.findCharacterByName(revelation.getCharacterName());
         
         if (!charOpt.isPresent()) {
             log.warn("[SecretRevelationApplier] Character '{}' not found - skipping secret revelation", 

@@ -91,11 +91,26 @@ Analyze the exchange and extract changes into the following structure:
    - World state changes impact = pressure changes (e.g., "war declared" escalates existing tensions)
    - Tone influences base pressure (horror tends toward higher baseline tension)
 
-5. CHARACTER APPEARANCES
-   - APPEARED: Status changed from "potential/background" to "present"
-   - LEFT: Character exited the scene
-   - MENTIONED: Referenced but not physically present
-
+5. CHARACTER APPEARANCES (CRITICAL - Check EVERY exchange)
+   - Compare the CHARACTER list above against what happens in the narrative text.
+   - If a character listed as "potential" or "background" speaks, acts, or is physically described in the scene → emit APPEARED.
+   - If a character listed as "present" leaves the scene or is no longer there → emit LEFT.
+   - If a character not physically present is only talked about → emit MENTIONED.
+   - IMPORTANT: A character who appears in the opening narration counts as APPEARED even if no one "introduces" them.
+   - Do NOT skip this section. If no appearances changed, use an empty array.
+6. BLUEPRINT UPDATES (Physical Appearance Changes)
+   - If the narrator DESCRIBED a character's physical appearance for the first time, capture it.
+   - If a character's appearance CHANGED (new clothes, injury, transformation), capture the update.
+   - Each updatedAnchors entry must be something you could SEE or DRAW:
+     * Hair, face, build, skin, height, age appearance
+     * Clothing, accessories, distinguishing marks
+     * Habitual posture or physical mannerisms
+   - Do NOT include personality traits, abstract qualities, or narrative concepts.
+   - BAD: "Has a commanding presence", "Is loyal", "Might have a key"
+   - GOOD: "Tall and lean with messy dark hair", "Wearing a damp jacket over a grey t-shirt"
+   - Provide ALL current visual anchors, not just what changed (this is a full replacement).
+   - If no appearance was described or changed, use an empty array.
+   
 ==========================================================
 JSON STRUCTURE
 ==========================================================
@@ -143,6 +158,13 @@ JSON STRUCTURE
       "changeType": "APPEARED|LEFT|MENTIONED",
       "context": "string"
     }
+  ],
+    "blueprintUpdates": [
+    {
+      "characterName": "string",
+      "updatedAnchors": ["string (PHYSICAL detail)", "string (clothing)", "string (distinguishing feature)"],
+      "reason": "string (e.g., 'first description', 'changed clothes', 'injured')"
+    }
   ]
 }
 
@@ -159,3 +181,4 @@ IMPORTANT NOTES
   * Secret/tension descriptions: Under 300 characters
 - Do NOT include markdown code fences (```json) or explanations
 - The response must be pure JSON that starts with { and ends with }
+- blueprintUpdates updatedAnchors: Each entry under 100 characters, max 5 entries per character

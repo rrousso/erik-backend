@@ -48,9 +48,6 @@ public class StanzaPersistenceService {
     private final StanzaRepository stanzaRepository;
     private final ObjectMapper objectMapper;
     
-    // Track facts by key during mapping to avoid duplicates
-    private Map<String, Fact> factsByKey;
-    
     public StanzaPersistenceService(StanzaRepository stanzaRepository) {
         this.stanzaRepository = stanzaRepository;
         this.objectMapper = new ObjectMapper();
@@ -71,7 +68,7 @@ public class StanzaPersistenceService {
         log.info("[Persistence] Saving initialized stanza for persona: {}", persona.getName());
         
         // Reset fact tracking for this save
-        factsByKey = new HashMap<>();
+        Map<String, Fact> factsByKey = new HashMap<>();
         
         // 1. Create the main Stanza entity
         Stanza stanza = createStanzaEntity(initialized, persona);
@@ -81,7 +78,7 @@ public class StanzaPersistenceService {
         stanza.getCharacters().add(userChar);
         
         // 3. Create user's private facts + secrets
-        createFactsFromInitialization(stanza, initialized);
+        createFactsFromInitialization(stanza, initialized, factsByKey);
         
         // 4. Create explicit characters
         for (var charData : initialized.getExplicitCharacters()) {
@@ -108,7 +105,7 @@ public class StanzaPersistenceService {
         }
         
         // 8. Now link character knowledge
-        linkCharacterKnowledge(stanza, initialized);
+        linkCharacterKnowledge(stanza, initialized, factsByKey);
         
         // 9. Initialize first beat (NEW!)
         stanza.initializeFirstBeat();
@@ -280,8 +277,9 @@ public class StanzaPersistenceService {
     /**
      * Create facts from the initialization facts list.
      * All facts are created from the structured list provided by the LLM.
+     * @param factsByKey 
      */
-    private void createFactsFromInitialization(Stanza stanza, InitializedStanza initialized) {
+    private void createFactsFromInitialization(Stanza stanza, InitializedStanza initialized, Map<String, Fact> factsByKey) {
         log.info("[Persistence] Creating {} facts from initialization", initialized.getFacts().size());
         
         for (InitFact initFact : initialized.getFacts()) {
@@ -339,13 +337,14 @@ public class StanzaPersistenceService {
      * NEW LOGIC:
      * - Only create CharacterKnowledge for facts the character KNOWS
      * - If no record exists, character is assumed UNAWARE (handled by prompt builder)
+     * @param factsByKey 
      */
-    private void linkCharacterKnowledge(Stanza stanza, InitializedStanza initialized) {
+    private void linkCharacterKnowledge(Stanza stanza, InitializedStanza initialized, Map<String, Fact> factsByKey) {
         // Process explicit characters
         for (var charData : initialized.getExplicitCharacters()) {
             StanzaCharacter character = findCharacterByName(stanza, charData.getName());
             if (character != null) {
-                linkKnowledgeForCharacter(stanza, character, charData.getKnows());
+            	linkKnowledgeForCharacter(stanza, character, charData.getKnows(), factsByKey);
             }
         }
         
@@ -353,15 +352,16 @@ public class StanzaPersistenceService {
         for (var charData : initialized.getLikelyCharacters()) {
             StanzaCharacter character = findCharacterByName(stanza, charData.getName());
             if (character != null) {
-                linkKnowledgeForCharacter(stanza, character, charData.getKnows());
+            	linkKnowledgeForCharacter(stanza, character, charData.getKnows(), factsByKey);
             }
         }
     }
     
     /**
      * Create CharacterKnowledge records for fact tempIds the character knows.
+     * @param factsByKey 
      */
-    private void linkKnowledgeForCharacter(Stanza stanza, StanzaCharacter character, List<String> factTempIds) {
+    private void linkKnowledgeForCharacter(Stanza stanza, StanzaCharacter character, List<String> factTempIds, Map<String, Fact> factsByKey) {
         for (String tempId : factTempIds) {
             // Find fact by tempId
             Fact fact = factsByKey.get(tempId);

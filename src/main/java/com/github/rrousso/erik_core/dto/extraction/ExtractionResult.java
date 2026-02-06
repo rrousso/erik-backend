@@ -24,12 +24,21 @@ public class ExtractionResult {
     private List<SecretRevelation> secretRevelations = new ArrayList<>();
     private List<TensionChange> tensionChanges = new ArrayList<>();
     private List<CharacterAppearance> characterAppearances = new ArrayList<>();
+    private List<BlueprintUpdate> blueprintUpdates = new ArrayList<>();
     
     // === CONSTRUCTORS ===
     
     public ExtractionResult() {}
     
     // === GETTERS AND SETTERS ===
+    
+    public List<BlueprintUpdate> getBlueprintUpdates() {
+        return blueprintUpdates;
+    }
+    
+    public void setBlueprintUpdates(List<BlueprintUpdate> blueprintUpdates) {
+        this.blueprintUpdates = blueprintUpdates != null ? blueprintUpdates : new ArrayList<>();
+    }
     
     public List<EventExtraction> getEvents() {
         return events;
@@ -81,7 +90,8 @@ public class ExtractionResult {
             || !factDiscoveries.isEmpty()  
             || !secretRevelations.isEmpty()
             || !tensionChanges.isEmpty()
-            || !characterAppearances.isEmpty();
+            || !characterAppearances.isEmpty()
+            || !blueprintUpdates.isEmpty();
     }
     
     /**
@@ -92,14 +102,15 @@ public class ExtractionResult {
             + factDiscoveries.size()  
             + secretRevelations.size()
             + tensionChanges.size()
-            + characterAppearances.size();
+            + characterAppearances.size()
+            + blueprintUpdates.size();
     }
     
     @Override
     public String toString() {
-        return String.format("ExtractionResult[events=%d, factDiscoveries=%d, secrets=%d, tensions=%d, appearances=%d]",
+        return String.format("ExtractionResult[events=%d, factDiscoveries=%d, secrets=%d, tensions=%d, appearances=%d, blueprints=%d]",
             events.size(),factDiscoveries.size(), secretRevelations.size(), 
-            tensionChanges.size(), characterAppearances.size());
+            tensionChanges.size(), characterAppearances.size(), blueprintUpdates.size());
     }
     
 }
