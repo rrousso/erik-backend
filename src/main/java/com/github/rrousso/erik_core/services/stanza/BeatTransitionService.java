@@ -6,6 +6,7 @@ import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.github.rrousso.erik_core.domain.models.ConversationHistory;
 import com.github.rrousso.erik_core.domain.models.SessionState;
 import com.github.rrousso.erik_core.exceptions.llm.LLMException;
 import com.github.rrousso.erik_core.exceptions.stanza.StanzaNotFoundException;
@@ -133,7 +134,12 @@ public class BeatTransitionService {
 		}
         
         stanza.incrementExchange();
-        extractionService.extractAndUpdate(stanza, regularText, narration);
+        ConversationHistory history = state.getStanzaHistory();
+        boolean extracted = extractionService.forceExtraction(stanza, history);
+
+        if (!extracted) {
+            log.warn("[BeatTransition] Failed to extract state at beat boundary");
+        }
         persistenceService.save(stanza);
         
         return narration;
@@ -201,11 +207,12 @@ public class BeatTransitionService {
 			throw new LLMException("Failed to generate opening narration", e);
 		}
         
-        extractionService.extractAndUpdate(
-            stanza,
-            "((transition))",  // Special marker
-            narration
-        );
+		ConversationHistory history = state.getStanzaHistory();
+		boolean extracted = extractionService.forceExtraction(stanza, history);
+
+		if (!extracted) {
+		    log.warn("[BeatTransition] Failed to extract state at beat boundary");
+		}
         persistenceService.save(stanza);
         
         return narration;

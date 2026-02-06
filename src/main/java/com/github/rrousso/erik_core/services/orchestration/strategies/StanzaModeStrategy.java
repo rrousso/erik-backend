@@ -4,7 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import com.github.rrousso.erik_core.config.ExtractionConfig;
+import com.github.rrousso.erik_core.domain.models.ConversationHistory;
 import com.github.rrousso.erik_core.domain.models.SessionState;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
 import com.github.rrousso.erik_core.services.orchestration.ConversationService;
@@ -28,19 +28,16 @@ public class StanzaModeStrategy implements FlowStrategy {
     private final StanzaPersistenceService persistenceService;
     private final StanzaExtractionService extractionService;
     private final EventCompressionService compressionService;
-    private final ExtractionConfig extractionConfig;
     
     public StanzaModeStrategy(
             ConversationService conversationService,
             StanzaPersistenceService persistenceService,
             StanzaExtractionService extractionService,
-            EventCompressionService compressionService,
-            ExtractionConfig extractionConfig) {
+            EventCompressionService compressionService) {
         this.conversationService = conversationService;
         this.persistenceService = persistenceService;
         this.extractionService = extractionService;
         this.compressionService = compressionService;
-        this.extractionConfig = extractionConfig;
     }
     
     @Override
@@ -89,18 +86,16 @@ public class StanzaModeStrategy implements FlowStrategy {
             stanza.incrementExchange();
             int exchangeNumber = stanza.getCurrentExchange();
             
-            // Determine if we should extract for this exchange
+            // Process extraction - service decides whether to extract based on config
+            ConversationHistory history = state.getStanzaHistory();
             boolean isFirstExchange = (exchangeNumber == 1);
             boolean isFinalExchange = false; // We don't know if it's final in regular mode
-            
-            boolean shouldExtract = extractionConfig.shouldExtract(exchangeNumber, isFirstExchange, isFinalExchange);
-            
-            if (shouldExtract) {
-                log.debug("[StanzaModeStrategy] Extracting state changes (exchange {})", exchangeNumber);
-                extractionService.extractAndUpdate(stanza, userInput, narration);
-            } else {
-                log.debug("[StanzaModeStrategy] Skipping extraction (exchange {}, frequency: {})", 
-                    exchangeNumber, extractionConfig.getFrequency());
+
+            boolean extracted = extractionService.processExtraction(
+                stanza, history, exchangeNumber, isFirstExchange, isFinalExchange);
+
+            if (extracted) {
+                log.debug("[StanzaModeStrategy] Extraction completed for exchange {}", exchangeNumber);
             }
             
             // Check if we should compress events

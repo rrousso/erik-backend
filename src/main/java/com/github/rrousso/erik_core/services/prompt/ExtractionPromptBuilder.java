@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import com.github.rrousso.erik_core.domain.models.ConversationHistory;
 import com.github.rrousso.erik_core.persistence.entities.CharacterKnowledge;
 import com.github.rrousso.erik_core.persistence.entities.Fact;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
@@ -50,14 +51,17 @@ public class ExtractionPromptBuilder {
     }
     
     /**
-     * Build a complete extraction prompt for a given exchange
+     * Build a complete extraction prompt for a given exchange.
+     * 
+     * Uses conversation context from ConversationHistory, which includes
+     * last N exchanges (or synopsis + all if needed).
      * 
      * @param stanza The stanza entity (with all relationships loaded)
-     * @param userInput What the user typed
-     * @param narratorResponse What the narrator said
+     * @param history The conversation history
+     * @param extractionFrequency How often extraction runs (determines context window)
      * @return Complete prompt ready to send to Gemini
      */
-    public String buildPrompt(Stanza stanza, String userInput, String narratorResponse) {
+    public String buildPrompt(Stanza stanza, ConversationHistory history, int extractionFrequency) {
         log.debug("Building extraction prompt for stanza {}", stanza.getId());
         
         // Format the current state sections
@@ -67,6 +71,10 @@ public class ExtractionPromptBuilder {
         String factRegistrySection = formatFactRegistry(stanza);
         String worldContextSection = formatWorldContext(stanza);
         
+        // Get conversation context (replaces userInput + narratorResponse)
+        // Request extractionFrequency exchanges (so if frequency=3, get last 3 exchanges)
+        String conversationContext = history.getLastNExchangesForExtraction(extractionFrequency);
+        
         // Replace placeholders in template
         String prompt = extractionTemplate
             .replace("{characters}", charactersSection)
@@ -74,8 +82,9 @@ public class ExtractionPromptBuilder {
             .replace("{recent_events}", recentEventsSection)
             .replace("{fact_registry}", factRegistrySection)
             .replace("{world_context}", worldContextSection)
-            .replace("{user_input}", userInput)
-            .replace("{narrator_response}", narratorResponse);
+            .replace("{conversation_context}", conversationContext);
+        
+        log.debug("Extraction prompt built - conversation context: {} chars", conversationContext.length());
         
         return prompt;
     }

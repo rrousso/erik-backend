@@ -86,6 +86,63 @@ public class ConversationHistory {
     }
     
     /**
+     * Get last N exchanges for extraction, with synopsis if needed.
+     * 
+     * This is used by the extraction system to provide narrative context
+     * for analyzing state changes. It automatically handles:
+     * - If N <= current history size: Returns last N exchanges only
+     * - If N > current history size: Returns synopsis + all current exchanges
+     * 
+     * Format: "USER: content\n\nASSISTANT: content\n\n"
+     * 
+     * @param n Number of exchanges requested (1 exchange = user + assistant pair)
+     * @return Formatted string ready for extraction prompt
+     */
+    public String getLastNExchangesForExtraction(int n) {
+        int messagesRequested = n * 2;  // Each exchange is 2 messages (user + assistant)
+        int currentSize = currentHistory.size();
+        
+        StringBuilder context = new StringBuilder();
+        
+        // If we need more context than we have in current history, include synopsis
+        if (messagesRequested > currentSize && !synopsis.isEmpty()) {
+            context.append("=== SYNOPSIS OF EARLIER EVENTS ===\n\n");
+            context.append(synopsis);
+            context.append("\n\n=== RECENT EXCHANGES ===\n\n");
+            
+            log.info("[ConversationHistory] Extraction context: synopsis ({} chars) + all {} current messages", 
+                synopsis.length(), currentSize);
+        }
+        
+        // Determine which messages to include
+        int startIndex;
+        if (messagesRequested >= currentSize) {
+            // Include all current history
+            startIndex = 0;
+            log.info("[ConversationHistory] Extraction context: all {} messages", currentSize);
+        } else {
+            // Include only last N exchanges (last N*2 messages)
+            startIndex = currentSize - messagesRequested;
+            log.info("[ConversationHistory] Extraction context: last {} exchanges ({} messages)", 
+                n, messagesRequested);
+        }
+        
+        // Format the messages
+        for (int i = startIndex; i < currentSize; i++) {
+            Message msg = currentHistory.get(i);
+            context.append(msg.getRole().toUpperCase())
+                   .append(": ")
+                   .append(msg.getContent())
+                   .append("\n\n");
+        }
+        
+        String result = context.toString();
+        log.info("[ConversationHistory] Generated extraction context: {} chars", result.length());
+        
+        return result;
+    }
+    
+    /**
      * Get synopsis (raw text, no formatting)
      */
     public String getSynopsis() {

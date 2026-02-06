@@ -67,13 +67,16 @@
         </dependency>
         
         <!-- ByteBuddy is managed by Spring Boot and needed by Hibernate at runtime -->
+        <!-- Upgraded to 1.15.11 for Java 23 support -->
         <dependency>
             <groupId>net.bytebuddy</groupId>
             <artifactId>byte-buddy</artifactId>
+            <version>1.15.11</version>
         </dependency>
         <dependency>
             <groupId>net.bytebuddy</groupId>
             <artifactId>byte-buddy-agent</artifactId>
+            <version>1.15.11</version>
         </dependency>
         
         <dependency>
@@ -94,6 +97,7 @@
                 <configuration>
                     <source>17</source>
                     <target>17</target>
+                    <release combine.self="override"></release>
                 </configuration>
             </plugin>
         </plugins>

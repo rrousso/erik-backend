@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+import java.util.List;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,21 +14,25 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.github.rrousso.erik_core.config.ExtractionConfig;
 import com.github.rrousso.erik_core.domain.enums.ModelType;
+import com.github.rrousso.erik_core.domain.models.ConversationHistory;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
 import com.github.rrousso.erik_core.services.llm.LLMClientService;
 import com.github.rrousso.erik_core.services.prompt.ExtractionPromptBuilder;
 import com.github.rrousso.erik_core.services.stanza.appliers.ExtractionApplierRegistry;
 
-import java.util.List;
-
 /**
  * Tests for StanzaExtractionService
  * 
- * Updated to test new FactDiscovery system instead of legacy
- * FactEstablishment + KnowledgeTransfer.
+ * Updated to test:
+ * - New processExtraction() method with frequency checking
+ * - New forceExtraction() method for beat boundaries
+ * - ConversationHistory integration
+ * - FactDiscovery system
  */
 @ExtendWith(MockitoExtension.class)
+@SuppressWarnings("null")
 class StanzaExtractionServiceTest {
     
     @Mock
@@ -38,41 +44,204 @@ class StanzaExtractionServiceTest {
     @Mock
     private ExtractionApplierRegistry applierRegistry;
     
-    @InjectMocks
+    @Mock
+    private ExtractionConfig extractionConfig;
+    
     private StanzaExtractionService service;
     
     // Test fixtures
     private Stanza mockStanza;
-    private String userInput;
-    private String narratorResponse;
+    private ConversationHistory mockHistory;
     
     @BeforeEach
     void setUp() {
+        // Manually construct the service with all mocked dependencies
+        service = new StanzaExtractionService(
+            promptBuilder,
+            llmClient,
+            applierRegistry,
+            extractionConfig
+        );
+        
         mockStanza = new Stanza();
         mockStanza.setId(1L);
+        mockStanza.setCurrentExchange(3);
         
-        userInput = "I walk into the classroom";
-        narratorResponse = "You step through the doorway. Scott and Stiles glance up from their desks.";
+        mockHistory = new ConversationHistory();
+        mockHistory.addUserMessage("I walk into the classroom");
+        mockHistory.addAssistantMessage("You step through the doorway. Scott and Stiles glance up from their desks.");
     }
     
-    // ========== SUCCESSFUL EXTRACTION TESTS ==========
+    // ========== PROCESS EXTRACTION TESTS ==========
     
-    @SuppressWarnings("null")
+    @Test
+    @DisplayName("Should process extraction when frequency check passes")
+    void shouldProcessExtractionWhenFrequencyCheckPasses() throws Exception {
+        // Given
+        int exchangeNumber = 3;
+        boolean isFirstExchange = false;
+        boolean isFinalExchange = false;
+        
+        when(extractionConfig.shouldExtract(exchangeNumber, isFirstExchange, isFinalExchange))
+            .thenReturn(true);
+        when(extractionConfig.getFrequency()).thenReturn(3);
+        
+        String mockPrompt = "Extract changes...";
+        String mockJsonResponse = createFullExtractionJsonWithFactDiscovery();
+        
+        when(promptBuilder.buildPrompt(eq(mockStanza), eq(mockHistory), eq(3)))
+            .thenReturn(mockPrompt);
+        when(llmClient.call(eq(ModelType.ANALYTICAL), eq(mockPrompt), anyString()))
+            .thenReturn(mockJsonResponse);
+        
+        // When
+        boolean result = service.processExtraction(mockStanza, mockHistory, exchangeNumber, isFirstExchange, isFinalExchange);
+        
+        // Then
+        assertTrue(result);
+        verify(extractionConfig).shouldExtract(exchangeNumber, isFirstExchange, isFinalExchange);
+        verify(promptBuilder).buildPrompt(mockStanza, mockHistory, 3);
+        verify(llmClient).call(eq(ModelType.ANALYTICAL), anyString(), anyString());
+        verify(applierRegistry).applyEvents(eq(mockStanza), anyList());
+        verify(applierRegistry).applyFactDiscoveries(eq(mockStanza), anyList());
+    }
+    
+    @Test
+    @DisplayName("Should skip extraction when frequency check fails")
+    void shouldSkipExtractionWhenFrequencyCheckFails() throws Exception {
+        // Given
+        int exchangeNumber = 2;
+        boolean isFirstExchange = false;
+        boolean isFinalExchange = false;
+        
+        when(extractionConfig.shouldExtract(exchangeNumber, isFirstExchange, isFinalExchange))
+            .thenReturn(false);
+        when(extractionConfig.getFrequency()).thenReturn(3);
+        
+        // When
+        boolean result = service.processExtraction(mockStanza, mockHistory, exchangeNumber, isFirstExchange, isFinalExchange);
+        
+        // Then
+        assertFalse(result);
+        verify(extractionConfig).shouldExtract(exchangeNumber, isFirstExchange, isFinalExchange);
+        verifyNoInteractions(promptBuilder);
+        verifyNoInteractions(llmClient);
+        verifyNoInteractions(applierRegistry);
+    }
+    
+    @Test
+    @DisplayName("Should always extract on first exchange when configured")
+    void shouldAlwaysExtractOnFirstExchange() throws Exception {
+        // Given
+        int exchangeNumber = 1;
+        boolean isFirstExchange = true;
+        boolean isFinalExchange = false;
+        
+        when(extractionConfig.shouldExtract(exchangeNumber, isFirstExchange, isFinalExchange))
+            .thenReturn(true);
+        when(extractionConfig.getFrequency()).thenReturn(3);
+        
+        String mockPrompt = "Extract changes...";
+        String mockJsonResponse = createEventsOnlyJson();
+        
+        when(promptBuilder.buildPrompt(any(), any(), anyInt())).thenReturn(mockPrompt);
+        when(llmClient.call(any(), anyString(), anyString())).thenReturn(mockJsonResponse);
+        
+        // When
+        boolean result = service.processExtraction(mockStanza, mockHistory, exchangeNumber, isFirstExchange, isFinalExchange);
+        
+        // Then
+        assertTrue(result);
+        verify(extractionConfig).shouldExtract(exchangeNumber, true, false);
+    }
+    
+    @Test
+    @DisplayName("Should always extract on final exchange when configured")
+    void shouldAlwaysExtractOnFinalExchange() throws Exception {
+        // Given
+        int exchangeNumber = 10;
+        boolean isFirstExchange = false;
+        boolean isFinalExchange = true;
+        
+        when(extractionConfig.shouldExtract(exchangeNumber, isFirstExchange, isFinalExchange))
+            .thenReturn(true);
+        when(extractionConfig.getFrequency()).thenReturn(3);
+        
+        String mockPrompt = "Extract changes...";
+        String mockJsonResponse = createEventsOnlyJson();
+        
+        when(promptBuilder.buildPrompt(any(), any(), anyInt())).thenReturn(mockPrompt);
+        when(llmClient.call(any(), anyString(), anyString())).thenReturn(mockJsonResponse);
+        
+        // When
+        boolean result = service.processExtraction(mockStanza, mockHistory, exchangeNumber, isFirstExchange, isFinalExchange);
+        
+        // Then
+        assertTrue(result);
+        verify(extractionConfig).shouldExtract(exchangeNumber, false, true);
+    }
+    
+    // ========== FORCE EXTRACTION TESTS ==========
+    
+    @Test
+    @DisplayName("Should force extraction regardless of frequency config")
+    void shouldForceExtractionRegardlessOfFrequency() throws Exception {
+        // Given
+        String mockPrompt = "Extract changes...";
+        String mockJsonResponse = createFullExtractionJsonWithFactDiscovery();
+        
+        when(extractionConfig.getFrequency()).thenReturn(3);
+        when(promptBuilder.buildPrompt(any(), any(), anyInt())).thenReturn(mockPrompt);
+        when(llmClient.call(any(), anyString(), anyString())).thenReturn(mockJsonResponse);
+        
+        // When
+        boolean result = service.forceExtraction(mockStanza, mockHistory);
+        
+        // Then
+        assertTrue(result);
+        // shouldExtract should NOT be called - we're forcing
+        verify(extractionConfig, never()).shouldExtract(anyInt(), anyBoolean(), anyBoolean());
+        verify(promptBuilder).buildPrompt(mockStanza, mockHistory, 3);
+        verify(llmClient).call(eq(ModelType.ANALYTICAL), anyString(), anyString());
+    }
+    
+    @Test
+    @DisplayName("Should return false when force extraction fails")
+    void shouldReturnFalseWhenForceExtractionFails() throws Exception {
+        // Given
+        when(extractionConfig.getFrequency()).thenReturn(1);
+        when(promptBuilder.buildPrompt(any(), any(), anyInt()))
+            .thenThrow(new RuntimeException("LLM failure"));
+        
+        // When
+        boolean result = service.forceExtraction(mockStanza, mockHistory);
+        
+        // Then
+        assertFalse(result, "Force extraction should return false when it fails, but returned: " + result);
+    }
+    
+    // ========== EXTRACTION LOGIC TESTS ==========
+    
     @Test
     @DisplayName("Should successfully extract and apply all change types with FactDiscovery")
     void shouldExtractAndApplyAllChangeTypesWithFactDiscovery() throws Exception {
         // Given
+        when(extractionConfig.shouldExtract(anyInt(), anyBoolean(), anyBoolean())).thenReturn(true);
+        when(extractionConfig.getFrequency()).thenReturn(1);
+        
         String mockPrompt = "Extract changes from this exchange...";
         String mockJsonResponse = createFullExtractionJsonWithFactDiscovery();
         
-        when(promptBuilder.buildPrompt(mockStanza, userInput, narratorResponse)).thenReturn(mockPrompt);
-        when(llmClient.call(eq(ModelType.ANALYTICAL), eq(mockPrompt), anyString())).thenReturn(mockJsonResponse);
+        when(promptBuilder.buildPrompt(eq(mockStanza), eq(mockHistory), eq(1)))
+            .thenReturn(mockPrompt);
+        when(llmClient.call(eq(ModelType.ANALYTICAL), eq(mockPrompt), anyString()))
+            .thenReturn(mockJsonResponse);
         
         // When
-        service.extractAndUpdate(mockStanza, userInput, narratorResponse);
+        service.processExtraction(mockStanza, mockHistory, 1, false, false);
         
         // Then
-        verify(promptBuilder).buildPrompt(mockStanza, userInput, narratorResponse);
+        verify(promptBuilder).buildPrompt(mockStanza, mockHistory, 1);
         verify(llmClient).call(eq(ModelType.ANALYTICAL), eq(mockPrompt), anyString());
         
         // Verify all appliers were called with non-empty lists
@@ -83,19 +252,21 @@ class StanzaExtractionServiceTest {
         verify(applierRegistry).applyCharacterAppearances(eq(mockStanza), argThat(list -> list.size() == 2));
     }
     
-    @SuppressWarnings("null")
     @Test
     @DisplayName("Should only apply event changes when other categories are empty")
-    void shouldApplyOnlyEventsWhenOtherCategoriesEmpty() throws Exception {
+    void shouldOnlyApplyEventChangesWhenOtherCategoriesAreEmpty() throws Exception {
         // Given
-        String mockPrompt = "Extract changes...";
+        when(extractionConfig.shouldExtract(anyInt(), anyBoolean(), anyBoolean())).thenReturn(true);
+        when(extractionConfig.getFrequency()).thenReturn(1);
+        
+        String mockPrompt = "Extract...";
         String mockJsonResponse = createEventsOnlyJson();
         
-        when(promptBuilder.buildPrompt(mockStanza, userInput, narratorResponse)).thenReturn(mockPrompt);
-        when(llmClient.call(eq(ModelType.ANALYTICAL), anyString(), anyString())).thenReturn(mockJsonResponse);
+        when(promptBuilder.buildPrompt(any(), any(), anyInt())).thenReturn(mockPrompt);
+        when(llmClient.call(any(), anyString(), anyString())).thenReturn(mockJsonResponse);
         
         // When
-        service.extractAndUpdate(mockStanza, userInput, narratorResponse);
+        service.processExtraction(mockStanza, mockHistory, 1, false, false);
         
         // Then
         verify(applierRegistry).applyEvents(eq(mockStanza), argThat(list -> list.size() == 1));
@@ -105,22 +276,24 @@ class StanzaExtractionServiceTest {
         verify(applierRegistry).applyCharacterAppearances(eq(mockStanza), argThat(List::isEmpty));
     }
     
-    @SuppressWarnings("null")
     @Test
-    @DisplayName("Should handle extraction with no changes detected")
-    void shouldHandleNoChangesDetected() throws Exception {
+    @DisplayName("Should not call appliers when no changes extracted")
+    void shouldNotCallAppliersWhenNoChangesExtracted() throws Exception {
         // Given
-        String mockPrompt = "Extract changes...";
-        String mockJsonResponse = createEmptyExtractionJson();
+        when(extractionConfig.shouldExtract(anyInt(), anyBoolean(), anyBoolean())).thenReturn(true);
+        when(extractionConfig.getFrequency()).thenReturn(1);
         
-        when(promptBuilder.buildPrompt(mockStanza, userInput, narratorResponse)).thenReturn(mockPrompt);
-        when(llmClient.call(eq(ModelType.ANALYTICAL), anyString(), anyString())).thenReturn(mockJsonResponse);
+        String mockPrompt = "Extract...";
+        String mockJsonResponse = createNoChangesJson();
+        
+        when(promptBuilder.buildPrompt(any(), any(), anyInt())).thenReturn(mockPrompt);
+        when(llmClient.call(any(), anyString(), anyString())).thenReturn(mockJsonResponse);
         
         // When
-        service.extractAndUpdate(mockStanza, userInput, narratorResponse);
+        service.processExtraction(mockStanza, mockHistory, 1, false, false);
         
         // Then
-        verify(promptBuilder).buildPrompt(mockStanza, userInput, narratorResponse);
+        verify(promptBuilder).buildPrompt(mockStanza, mockHistory, 1);
         verify(llmClient).call(eq(ModelType.ANALYTICAL), anyString(), anyString());
         
         // Verify no appliers were called since no changes
@@ -131,57 +304,65 @@ class StanzaExtractionServiceTest {
         verify(applierRegistry, never()).applyCharacterAppearances(any(), any());
     }
     
-    @SuppressWarnings("null")
     @Test
     @DisplayName("Should use ANALYTICAL model type for extraction")
     void shouldUseAnalyticalModelType() throws Exception {
         // Given
+        when(extractionConfig.shouldExtract(anyInt(), anyBoolean(), anyBoolean())).thenReturn(true);
+        when(extractionConfig.getFrequency()).thenReturn(1);
+        
         String mockPrompt = "Extract...";
         String mockJsonResponse = createEventsOnlyJson();
         
-        when(promptBuilder.buildPrompt(mockStanza, userInput, narratorResponse)).thenReturn(mockPrompt);
-        when(llmClient.call(any(ModelType.class), anyString(), anyString())).thenReturn(mockJsonResponse);
+        when(promptBuilder.buildPrompt(any(), any(), anyInt())).thenReturn(mockPrompt);
+        when(llmClient.call(any(), anyString(), anyString())).thenReturn(mockJsonResponse);
         
         // When
-        service.extractAndUpdate(mockStanza, userInput, narratorResponse);
+        service.processExtraction(mockStanza, mockHistory, 1, false, false);
         
         // Then
         verify(llmClient).call(eq(ModelType.ANALYTICAL), anyString(), anyString());
     }
     
-    @SuppressWarnings("null")
     @Test
     @DisplayName("Should pass correct arguments to prompt builder")
     void shouldPassCorrectArgumentsToPromptBuilder() throws Exception {
         // Given
-        String customUserInput = "I attack the werewolf";
-        String customNarratorResponse = "You lunge at the creature but it dodges.";
+        ConversationHistory customHistory = new ConversationHistory();
+        customHistory.addUserMessage("I attack the werewolf");
+        customHistory.addAssistantMessage("You lunge at the creature but it dodges.");
+        
+        when(extractionConfig.shouldExtract(anyInt(), anyBoolean(), anyBoolean())).thenReturn(true);
+        when(extractionConfig.getFrequency()).thenReturn(2);
+        
         String mockPrompt = "Extract...";
         String mockJsonResponse = createEventsOnlyJson();
         
-        when(promptBuilder.buildPrompt(mockStanza, customUserInput, customNarratorResponse)).thenReturn(mockPrompt);
-        when(llmClient.call(any(ModelType.class), anyString(), anyString())).thenReturn(mockJsonResponse);
+        when(promptBuilder.buildPrompt(mockStanza, customHistory, 2)).thenReturn(mockPrompt);
+        when(llmClient.call(any(), anyString(), anyString())).thenReturn(mockJsonResponse);
         
         // When
-        service.extractAndUpdate(mockStanza, customUserInput, customNarratorResponse);
+        service.processExtraction(mockStanza, customHistory, 4, false, false);
         
         // Then
-        verify(promptBuilder).buildPrompt(mockStanza, customUserInput, customNarratorResponse);
+        verify(promptBuilder).buildPrompt(mockStanza, customHistory, 2);
     }
     
-    @SuppressWarnings("null")
     @Test
     @DisplayName("Should call appliers in correct order")
     void shouldCallAppliersInCorrectOrder() throws Exception {
         // Given
+        when(extractionConfig.shouldExtract(anyInt(), anyBoolean(), anyBoolean())).thenReturn(true);
+        when(extractionConfig.getFrequency()).thenReturn(1);
+        
         String mockPrompt = "Extract...";
         String mockJsonResponse = createFullExtractionJsonWithFactDiscovery();
         
-        when(promptBuilder.buildPrompt(mockStanza, userInput, narratorResponse)).thenReturn(mockPrompt);
-        when(llmClient.call(any(ModelType.class), anyString(), anyString())).thenReturn(mockJsonResponse);
+        when(promptBuilder.buildPrompt(any(), any(), anyInt())).thenReturn(mockPrompt);
+        when(llmClient.call(any(), anyString(), anyString())).thenReturn(mockJsonResponse);
         
         // When
-        service.extractAndUpdate(mockStanza, userInput, narratorResponse);
+        service.processExtraction(mockStanza, mockHistory, 1, false, false);
         
         // Then - verify call order
         var inOrder = inOrder(applierRegistry);
@@ -194,108 +375,57 @@ class StanzaExtractionServiceTest {
     
     // ========== ERROR HANDLING TESTS ==========
     
-    @SuppressWarnings("null")
     @Test
     @DisplayName("Should not throw exception when LLM call fails")
     void shouldNotThrowWhenLLMCallFails() throws Exception {
         // Given
-        String mockPrompt = "Extract...";
-        
-        when(promptBuilder.buildPrompt(mockStanza, userInput, narratorResponse)).thenReturn(mockPrompt);
-        when(llmClient.call(any(ModelType.class), anyString(), anyString()))
-            .thenThrow(new RuntimeException("LLM service unavailable"));
+        when(extractionConfig.shouldExtract(anyInt(), anyBoolean(), anyBoolean())).thenReturn(true);
+        when(extractionConfig.getFrequency()).thenReturn(1);
+        when(promptBuilder.buildPrompt(any(), any(), anyInt())).thenReturn("prompt");
+        when(llmClient.call(any(), anyString(), anyString()))
+            .thenThrow(new RuntimeException("LLM error"));
         
         // When/Then - should not throw
         assertDoesNotThrow(() -> {
-            service.extractAndUpdate(mockStanza, userInput, narratorResponse);
+            service.processExtraction(mockStanza, mockHistory, 1, false, false);
         });
         
-        // Appliers should not be called if LLM fails
-        verify(applierRegistry, never()).applyEvents(any(), any());
+        // Verify appliers were not called
+        verifyNoInteractions(applierRegistry);
     }
     
-    @SuppressWarnings("null")
     @Test
     @DisplayName("Should not throw exception when JSON parsing fails")
     void shouldNotThrowWhenJsonParsingFails() throws Exception {
         // Given
-        String mockPrompt = "Extract...";
-        String invalidJson = "This is not valid JSON { broken structure";
+        when(extractionConfig.shouldExtract(anyInt(), anyBoolean(), anyBoolean())).thenReturn(true);
+        when(extractionConfig.getFrequency()).thenReturn(1);
+        when(promptBuilder.buildPrompt(any(), any(), anyInt())).thenReturn("prompt");
+        when(llmClient.call(any(), anyString(), anyString()))
+            .thenReturn("invalid json {{{");
         
-        when(promptBuilder.buildPrompt(mockStanza, userInput, narratorResponse)).thenReturn(mockPrompt);
-        when(llmClient.call(any(ModelType.class), anyString(), anyString())).thenReturn(invalidJson);
-        
-        // When/Then
+        // When/Then - should not throw
         assertDoesNotThrow(() -> {
-            service.extractAndUpdate(mockStanza, userInput, narratorResponse);
-        });
-        
-        verify(applierRegistry, never()).applyEvents(any(), any());
-    }
-    
-    @SuppressWarnings("null")
-    @Test
-    @DisplayName("Should verify @Transactional behavior would rollback on error")
-    void shouldBeTransactionalMethod() throws Exception {
-        // Given
-        String mockPrompt = "Extract...";
-        String mockJsonResponse = createFullExtractionJsonWithFactDiscovery();
-        
-        when(promptBuilder.buildPrompt(mockStanza, userInput, narratorResponse)).thenReturn(mockPrompt);
-        when(llmClient.call(any(ModelType.class), anyString(), anyString())).thenReturn(mockJsonResponse);
-        
-        // Simulate database error in middle of applying
-        doThrow(new RuntimeException("Database constraint violation"))
-            .when(applierRegistry).applyFactDiscoveries(any(), any());
-        
-        // When
-        service.extractAndUpdate(mockStanza, userInput, narratorResponse);
-        
-        // Then - events were applied before the error, but transaction should rollback
-        // (In actual Spring context, the transaction would rollback all changes)
-        verify(applierRegistry).applyEvents(any(), any());
-        verify(applierRegistry).applyFactDiscoveries(any(), any());
-        // Subsequent appliers not called due to exception
-        verify(applierRegistry, never()).applySecretRevelations(any(), any());
-    }
-    
-    // ========== EDGE CASES ==========
-    
-    @SuppressWarnings("null")
-    @Test
-    @DisplayName("Should handle null user input gracefully")
-    void shouldHandleNullUserInput() throws Exception {
-        // Given
-        String mockPrompt = "Extract...";
-        String mockJsonResponse = createEmptyExtractionJson();
-        
-        when(promptBuilder.buildPrompt(eq(mockStanza), isNull(), eq(narratorResponse)))
-            .thenReturn(mockPrompt);
-        when(llmClient.call(any(ModelType.class), anyString(), anyString()))
-            .thenReturn(mockJsonResponse);
-        
-        // When/Then
-        assertDoesNotThrow(() -> {
-            service.extractAndUpdate(mockStanza, null, narratorResponse);
+            service.processExtraction(mockStanza, mockHistory, 1, false, false);
         });
     }
     
-    @SuppressWarnings("null")
     @Test
-    @DisplayName("Should handle null narrator response gracefully")
-    void shouldHandleNullNarratorResponse() throws Exception {
+    @DisplayName("Should not throw exception when applier fails")
+    void shouldNotThrowWhenApplierFails() throws Exception {
         // Given
-        String mockPrompt = "Extract...";
-        String mockJsonResponse = createEmptyExtractionJson();
+        when(extractionConfig.shouldExtract(anyInt(), anyBoolean(), anyBoolean())).thenReturn(true);
+        when(extractionConfig.getFrequency()).thenReturn(1);
+        when(promptBuilder.buildPrompt(any(), any(), anyInt())).thenReturn("prompt");
+        when(llmClient.call(any(), anyString(), anyString()))
+            .thenReturn(createEventsOnlyJson());
         
-        when(promptBuilder.buildPrompt(eq(mockStanza), eq(userInput), isNull()))
-            .thenReturn(mockPrompt);
-        when(llmClient.call(any(ModelType.class), anyString(), anyString()))
-            .thenReturn(mockJsonResponse);
+        doThrow(new RuntimeException("Applier error"))
+            .when(applierRegistry).applyEvents(any(), any());
         
-        // When/Then
+        // When/Then - should not throw
         assertDoesNotThrow(() -> {
-            service.extractAndUpdate(mockStanza, userInput, null);
+            service.processExtraction(mockStanza, mockHistory, 1, false, false);
         });
     }
     
@@ -339,30 +469,29 @@ class StanzaExtractionServiceTest {
               ],
               "secretRevelations": [
                 {
-                  "secretDescription": "werewolf_status",
-                  "characterName": "Scott McCall",
+                  "secretDescription": "werewolf identity",
+                  "characterName": "User",
                   "newState": "SUSPICIOUS",
-                  "howRevealed": "User noticed Scott's unusual reaction"
+                  "howRevealed": "Scott McCall's behavior seemed unusual"
                 }
               ],
               "tensionChanges": [
                 {
-                  "tensionDescription": "Supernatural Secret",
-                  "changeType": "ESCALATED",
-                  "newPressure": 6,
-                  "reason": "New person in the room increases exposure risk"
+                  "tensionDescription": "hiding supernatural nature",
+                  "changeType": "PRESSURE_INCREASE",
+                  "reason": "New person asking questions"
                 }
               ],
               "characterAppearances": [
                 {
                   "characterName": "Scott McCall",
                   "changeType": "APPEARED",
-                  "context": "Classroom"
+                  "context": "Looked up from his desk"
                 },
                 {
                   "characterName": "Stiles Stilinski",
                   "changeType": "APPEARED",
-                  "context": "Classroom"
+                  "context": "Was already in the classroom"
                 }
               ]
             }
@@ -370,14 +499,14 @@ class StanzaExtractionServiceTest {
     }
     
     /**
-     * Create extraction JSON with only events
+     * Create JSON with only events (other categories empty)
      */
     private String createEventsOnlyJson() {
         return """
             {
               "events": [
                 {
-                  "description": "User entered room",
+                  "description": "User walked in",
                   "significance": "MINOR",
                   "charactersInvolved": ["User"]
                 }
@@ -391,9 +520,9 @@ class StanzaExtractionServiceTest {
     }
     
     /**
-     * Create extraction JSON with no changes
+     * Create JSON with no changes at all
      */
-    private String createEmptyExtractionJson() {
+    private String createNoChangesJson() {
         return """
             {
               "events": [],

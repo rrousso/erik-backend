@@ -34,14 +34,10 @@ FACT REGISTRY:
 {fact_registry}
 
 ==========================================================
-THIS EXCHANGE
+CONVERSATION SINCE LAST EXTRACTION
 ==========================================================
 
-USER INPUT:
-{user_input}
-
-NARRATOR RESPONSE:
-{narrator_response}
+{conversation_context}
 
 ==========================================================
 EXTRACTION TASK

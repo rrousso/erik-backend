@@ -4,8 +4,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import com.github.rrousso.erik_core.config.ExtractionConfig;
+
 import com.github.rrousso.erik_core.domain.enums.StanzaStatus;
+import com.github.rrousso.erik_core.domain.models.ConversationHistory;
 import com.github.rrousso.erik_core.domain.models.SessionState;
 import com.github.rrousso.erik_core.domain.valueobjects.CompletedStanza;
 import com.github.rrousso.erik_core.persistence.entities.Stanza;
@@ -35,19 +36,16 @@ public class EndStanzaStrategy implements FlowStrategy {
     private final StanzaCompletionService completionService;
     private final StanzaPersistenceService persistenceService;
     private final StanzaExtractionService extractionService;
-    private final ExtractionConfig extractionConfig;
     
     public EndStanzaStrategy(
             ConversationService conversationService,
             StanzaCompletionService completionService,
             StanzaExtractionService extractionService,
-            StanzaPersistenceService persistenceService,
-            ExtractionConfig extractionConfig) {
+            StanzaPersistenceService persistenceService) {
         this.conversationService = conversationService;
         this.completionService = completionService;
         this.persistenceService = persistenceService;
         this.extractionService = extractionService;
-        this.extractionConfig = extractionConfig;
     }
 
     @Override
@@ -85,18 +83,19 @@ public class EndStanzaStrategy implements FlowStrategy {
                     // Increment exchange count for final narration
                     stanza.incrementExchange();
                     
-                    // Extract final state changes (respects config but marked as final exchange)
+                 // Process final extraction (service decides based on config)
+                    ConversationHistory history = state.getStanzaHistory();
                     int exchangeNumber = stanza.getCurrentExchange();
                     boolean isFinalExchange = true;
                     boolean isFirstExchange = false;
-                    
-                    boolean shouldExtract = extractionConfig.shouldExtract(exchangeNumber, isFirstExchange, isFinalExchange);
-                    
-                    if (shouldExtract) {
-                        log.debug("[EndStanzaStrategy] Extracting final state changes (exchange {})", exchangeNumber);
-                        extractionService.extractAndUpdate(stanza, userInput, closure);
+
+                    boolean extracted = extractionService.processExtraction(
+                        stanza, history, exchangeNumber, isFirstExchange, isFinalExchange);
+
+                    if (extracted) {
+                        log.debug("[EndStanzaStrategy] Final extraction completed for exchange {}", exchangeNumber);
                     } else {
-                        log.debug("[EndStanzaStrategy] Skipping final extraction per configuration");
+                        log.debug("[EndStanzaStrategy] Final extraction skipped per configuration");
                     }
                     
                     // Mark as completed
