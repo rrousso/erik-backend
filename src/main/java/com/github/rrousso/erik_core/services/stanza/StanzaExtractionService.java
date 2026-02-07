@@ -158,6 +158,7 @@ public class StanzaExtractionService {
             applierRegistry.applyFactDiscoveries(stanza, result.getFactDiscoveries());
             applierRegistry.applySecretRevelations(stanza, result.getSecretRevelations());
             applierRegistry.applyTensionChanges(stanza, result.getTensionChanges());
+            applierRegistry.applyEmergentCharacters(stanza, result.getEmergentCharacters());
             applierRegistry.applyCharacterAppearances(stanza, result.getCharacterAppearances());
             applierRegistry.applyBlueprintUpdates(stanza, result.getBlueprintUpdates());
             

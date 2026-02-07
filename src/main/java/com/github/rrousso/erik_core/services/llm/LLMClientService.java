@@ -5,6 +5,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.github.rrousso.erik_core.domain.enums.ModelType;
 import com.github.rrousso.erik_core.domain.models.ConversationHistory;
 import com.github.rrousso.erik_core.dto.openrouter.OpenRouterError;
@@ -22,7 +25,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 
 /**
@@ -77,23 +79,7 @@ public class LLMClientService {
 
         log.info("Preparing simple call to {} model: {}", modelType, config.model);
 
-        String body = String.format(Locale.US, """
-        {
-          "model": "%s",
-          "messages": [
-            { "role": "system", "content": %s },
-            { "role": "user", "content": %s }
-          ],
-          "temperature": %.1f,
-          "max_tokens": %d
-        }
-        """,
-            config.model,
-            jsonEscape(systemPrompt),
-            jsonEscape(userPrompt),
-            config.temperature,
-            config.maxTokens
-        );
+        String body = buildRequestBody(config, systemPrompt, userPrompt);
 
         log.debug("Request body length: {} chars", body.length());
 
@@ -129,43 +115,7 @@ public class LLMClientService {
 
         log.info("Preparing callWithHistory to {} model: {} with {} history messages", 
             modelType, config.model, history.size());
-
-        StringBuilder messagesJson = new StringBuilder();
-        messagesJson.append("[");
-
-        // Add system message
-        messagesJson.append(String.format(
-            "{ \"role\": \"system\", \"content\": %s }",
-            jsonEscape(systemPrompt)
-        ));
-
-        // Add conversation history
-        for (ConversationHistory.Message msg : history) {
-            messagesJson.append(",");
-            messagesJson.append(String.format(
-                "{ \"role\": \"%s\", \"content\": %s }",
-                msg.getRole(),
-                jsonEscape(msg.getContent())
-            ));
-        }
-
-        // Add final user prompt if not empty
-        if (!userPrompt.isEmpty()) {
-            messagesJson.append(",");
-            messagesJson.append(String.format(
-                "{ \"role\": \"user\", \"content\": %s }",
-                jsonEscape(userPrompt)
-            ));
-        }
-
-        messagesJson.append("]");
-
-        String body = "{\n" +
-            "  \"model\": \"" + config.model + "\",\n" +
-            "  \"messages\": " + messagesJson.toString() + ",\n" +
-            "  \"temperature\": " + config.temperature + ",\n" +
-            "  \"max_tokens\": " + config.maxTokens + "\n" +
-            "}";
+        String body = buildRequestBodyWithHistory(config, systemPrompt, userPrompt, history);
 
         log.debug("Request body length: {} chars", body.length());
 
@@ -234,61 +184,96 @@ public class LLMClientService {
     }
 
     /**
-     * Escape string for JSON (still needed for building request body)
+     * Build JSON request body using Jackson for safe serialization.
+     * Handles all special characters, Unicode, etc. automatically.
      */
-    private String jsonEscape(String text) {
-        return "\"" + text
-            .replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-            .replace("\t", "\\t") + "\"";
+    private String buildRequestBody(ModelConfig config, String systemPrompt, String userPrompt) {
+        try {
+            ObjectNode root = objectMapper.createObjectNode();
+            root.put("model", config.model);
+            root.put("temperature", config.temperature);
+            root.put("max_tokens", config.maxTokens);
+
+            ArrayNode messages = root.putArray("messages");
+            messages.addObject().put("role", "system").put("content", systemPrompt);
+            messages.addObject().put("role", "user").put("content", userPrompt);
+
+            return objectMapper.writeValueAsString(root);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to build request JSON", e);
+        }
+    }
+
+    /**
+     * Build JSON request body with conversation history using Jackson.
+     */
+    private String buildRequestBodyWithHistory(
+            ModelConfig config, 
+            String systemPrompt, 
+            String userPrompt,
+            List<ConversationHistory.Message> history) {
+        try {
+            ObjectNode root = objectMapper.createObjectNode();
+            root.put("model", config.model);
+            root.put("temperature", config.temperature);
+            root.put("max_tokens", config.maxTokens);
+
+            ArrayNode messages = root.putArray("messages");
+
+            // System message
+            messages.addObject().put("role", "system").put("content", systemPrompt);
+
+            // Conversation history
+            for (ConversationHistory.Message msg : history) {
+                messages.addObject().put("role", msg.getRole()).put("content", msg.getContent());
+            }
+
+            // Final user prompt (if not empty)
+            if (userPrompt != null && !userPrompt.isEmpty()) {
+                messages.addObject().put("role", "user").put("content", userPrompt);
+            }
+
+            return objectMapper.writeValueAsString(root);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to build request JSON with history", e);
+        }
     }
 
     /**
      * Parse OpenRouter API response using Jackson.
      * 
-     * REFACTORED: Replaced ~50 lines of manual char-by-char parsing with Jackson ObjectMapper.
-     * 
-     * Handles:
-     * - Successful responses: extracts content from first choice
-     * - Error responses: throws exception with detailed error message
-     * - Malformed JSON: throws exception with parsing error
-     * 
-     * @param responseBody Raw JSON response from OpenRouter API
-     * @return The content text from the assistant's message
-     * @throws Exception if response contains error or cannot be parsed
+     * Uses JSON tree parsing to reliably detect error responses
+     * (avoids false positives from content containing the word "error").
      */
-    private String parseResponse(String responseBody){
-        // First, try to parse as error response
-        if (responseBody.contains("\"error\"")) {
-            try {
-                OpenRouterError errorResponse = objectMapper.readValue(responseBody, OpenRouterError.class);
+    private String parseResponse(String responseBody) {
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+
+            // Check for top-level "error" key structurally
+            if (root.has("error")) {
+                OpenRouterError errorResponse = objectMapper.treeToValue(root, OpenRouterError.class);
                 String errorMsg = errorResponse.toString();
                 log.error("OpenRouter API returned error: {}", errorMsg);
                 throw new LLMApiException("OpenRouter API returned error", errorMsg);
-            } catch (Exception e) {
-                // If error parsing fails, log the raw response
-                log.error("Failed to parse error response: {}", responseBody);
-                throw new LLMApiException("OpenRouter API returned error", responseBody);
             }
-        }
-        
-        // Parse as successful response
-        try {
-            OpenRouterResponse successResponse = objectMapper.readValue(responseBody, OpenRouterResponse.class);
-            
+
+            // Parse as successful response
+            OpenRouterResponse successResponse = objectMapper.treeToValue(root, OpenRouterResponse.class);
+
             String content = successResponse.getContent();
-            
+
             if (content == null) {
-                log.error("No content in OpenRouter response. Choices: {}", 
+                log.error("No content in OpenRouter response. Choices: {}",
                     successResponse.getChoices() != null ? successResponse.getChoices().size() : 0);
                 throw new LLMInvalidResponseException("No content in response");
             }
-            
+
             log.debug("Successfully extracted content ({} chars)", content.length());
             return content;
-            
+
+        } catch (LLMApiException | LLMInvalidResponseException e) {
+            // Re-throw our own exceptions as-is
+            throw e;
         } catch (Exception e) {
             log.error("Failed to parse OpenRouter response", e);
             log.debug("Response body: {}", responseBody);

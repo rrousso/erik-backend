@@ -98,6 +98,7 @@ Analyze the exchange and extract changes into the following structure:
    - If a character not physically present is only talked about → emit MENTIONED.
    - IMPORTANT: A character who appears in the opening narration counts as APPEARED even if no one "introduces" them.
    - Do NOT skip this section. If no appearances changed, use an empty array.
+   
 6. BLUEPRINT UPDATES (Physical Appearance Changes)
    - If the narrator DESCRIBED a character's physical appearance for the first time, capture it.
    - If a character's appearance CHANGED (new clothes, injury, transformation), capture the update.
@@ -110,6 +111,16 @@ Analyze the exchange and extract changes into the following structure:
    - GOOD: "Tall and lean with messy dark hair", "Wearing a damp jacket over a grey t-shirt"
    - Provide ALL current visual anchors, not just what changed (this is a full replacement).
    - If no appearance was described or changed, use an empty array.
+   
+7. EMERGENT CHARACTERS (NEW characters not in the CHARACTER list above)
+   - Compare every character name in the narration to the names in the CHARACTERS section above.
+   - If a character APPEARED in the narration whose name does NOT match any name in the CHARACTERS list, they are EMERGENT — you MUST create a full entry in `emergentCharacters`.
+   - Use the narration to determine as much as possible (emotional state, appearance, how they relate to the user).
+   - For IP worlds (the WORLD CONTEXT shows a recognized franchise/IP): Use your canonical knowledge of that IP to fill in accurate role, blueprint, and personality details.
+   - For original worlds: Invent details that are consistent with what the narration shows. Base the blueprint on how they were described, what they said, and how they behaved. Fill in anything the narration doesn't cover with creative but plausible details.
+   - tier3Anchors MUST be PHYSICAL details only (same rules as blueprintUpdates).
+   - You must STILL emit a characterAppearances entry with changeType "APPEARED" for the same character.
+   - If no new characters appeared, use an empty array.   
    
 ==========================================================
 JSON STRUCTURE
@@ -165,6 +176,17 @@ JSON STRUCTURE
       "updatedAnchors": ["string (PHYSICAL detail)", "string (clothing)", "string (distinguishing feature)"],
       "reason": "string (e.g., 'first description', 'changed clothes', 'injured')"
     }
+  ],
+    "emergentCharacters": [
+    {
+      "characterName": "string",
+      "canonRole": "string (IP role or 'original')",
+      "currentEmotionalState": "string",
+      "relationshipToUser": "string (e.g., stranger, acquaintance, threat)",
+      "tier1Essentials": "string (Archetype & Speech Pattern)",
+      "tier2Motivators": "string (Primary Goal & Major Fear)",
+      "tier3Anchors": ["string (PHYSICAL detail)", "string (clothing)", "string (distinguishing feature)"]
+    }
   ]
 }
 
@@ -176,9 +198,10 @@ IMPORTANT NOTES
 - Character names must match EXACTLY with names in CHARACTER list above
 - All text fields have strict length limits - stay well under to avoid truncation:
   * Event descriptions: 280 characters maximum
-  * Fact statements: Keep concise (under 200 characters recommended)
+  * Fact statements: Keep concise (under 100 characters recommended)
   * Reasons/contexts: Under 200 characters
   * Secret/tension descriptions: Under 300 characters
 - Do NOT include markdown code fences (```json) or explanations
 - The response must be pure JSON that starts with { and ends with }
 - blueprintUpdates updatedAnchors: Each entry under 100 characters, max 5 entries per character
+- emergentCharacters: Only for characters whose names do NOT appear in the CHARACTERS list. Do not duplicate existing characters.

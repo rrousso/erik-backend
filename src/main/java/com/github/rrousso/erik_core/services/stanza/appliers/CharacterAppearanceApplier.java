@@ -61,32 +61,15 @@ public class CharacterAppearanceApplier implements ExtractionApplier<CharacterAp
         StanzaCharacter character;
         
         if (!charOpt.isPresent()) {
-            // EMERGENT CHARACTER - narrator invented them
-            log.warn("[CharacterAppearanceApplier] Character '{}' not in setup - creating as EMERGENT", 
-                appearance.getCharacterName());
-            
-            character = new StanzaCharacter(
-                stanza, 
-                appearance.getCharacterName()
-            );
-            
-            // Flag as emergent with context
-            character.setCanonRole("EMERGENT - " + 
-                (appearance.getContext() != null ? appearance.getContext() : "appeared in narration"));
-            
-            // Minimal setup
-            character.setPresenceStatus("present"); // They just appeared
-            character.setEmotionalState("Unknown - needs architect setup");
-            
-            // Add to stanza
-            stanza.getCharacters().add(character);
-            
-            log.info("[CharacterAppearanceApplier] Created EMERGENT character: {} (needs Phase 3 setup)", 
-                appearance.getCharacterName());
-            
-        } else {
-            character = charOpt.get();
+            // Character not found - EmergentCharacterApplier should have created it.
+            // If we're here, the LLM emitted APPEARED but not an emergentCharacters entry.
+            log.warn("[CharacterAppearanceApplier] Character '{}' not found - expected EmergentCharacterApplier " +
+                "to have created it. Skipping appearance update. Context: {}", 
+                appearance.getCharacterName(), appearance.getContext());
+            return;
         }
+        
+        character = charOpt.get();
         
         // Handle the appearance change type
         if (appearance.isAppearance()) {

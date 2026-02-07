@@ -38,6 +38,11 @@
         </dependency>
         
         <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        
+        <dependency>
     		<groupId>org.postgresql</groupId>
     		<artifactId>postgresql</artifactId>
    			<scope>runtime</scope>
@@ -65,26 +70,11 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
-        
-        <!-- ByteBuddy is managed by Spring Boot and needed by Hibernate at runtime -->
-        <!-- Upgraded to 1.15.11 for Java 23 support -->
-        <dependency>
-            <groupId>net.bytebuddy</groupId>
-            <artifactId>byte-buddy</artifactId>
-            <version>1.15.11</version>
-        </dependency>
-        <dependency>
-            <groupId>net.bytebuddy</groupId>
-            <artifactId>byte-buddy-agent</artifactId>
-            <version>1.15.11</version>
-        </dependency>
-        
         <dependency>
     		<groupId>com.fasterxml.jackson.core</groupId>
     		<artifactId>jackson-databind</artifactId>
 		</dependency>
-    </dependencies>
-    
+    </dependencies> 
     <build>
         <plugins>
             <plugin>

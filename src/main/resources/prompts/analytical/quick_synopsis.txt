@@ -15,7 +15,7 @@ Your job: Weave all three together into ONE cohesive narrative summary that tell
 - Write in past tense, third person
 - Focus on narrative flow, not dry facts
 - Make it feel like a complete story recap
-- Keep it brief but compelling (approximately 150-200 words)
+- Keep it brief but compelling (Less than 2000 characters)
 - **Do NOT include demographic details (gender identity, race, etc.) unless directly plot-relevant**
 
 ## STRUCTURE APPROACH

@@ -25,6 +25,7 @@ public class ExtractionResult {
     private List<TensionChange> tensionChanges = new ArrayList<>();
     private List<CharacterAppearance> characterAppearances = new ArrayList<>();
     private List<BlueprintUpdate> blueprintUpdates = new ArrayList<>();
+    private List<EmergentCharacterExtraction> emergentCharacters = new ArrayList<>();
     
     // === CONSTRUCTORS ===
     
@@ -80,6 +81,14 @@ public class ExtractionResult {
         this.characterAppearances = characterAppearances != null ? characterAppearances : new ArrayList<>();
     }
     
+    public List<EmergentCharacterExtraction> getEmergentCharacters() {
+        return emergentCharacters;
+    }
+    
+    public void setEmergentCharacters(List<EmergentCharacterExtraction> emergentCharacters) {
+        this.emergentCharacters = emergentCharacters != null ? emergentCharacters : new ArrayList<>();
+    }
+    
     // === CONVENIENCE METHODS ===
     
     /**
@@ -91,7 +100,8 @@ public class ExtractionResult {
             || !secretRevelations.isEmpty()
             || !tensionChanges.isEmpty()
             || !characterAppearances.isEmpty()
-            || !blueprintUpdates.isEmpty();
+            || !blueprintUpdates.isEmpty()
+            || !emergentCharacters.isEmpty();
     }
     
     /**
@@ -103,14 +113,15 @@ public class ExtractionResult {
             + secretRevelations.size()
             + tensionChanges.size()
             + characterAppearances.size()
-            + blueprintUpdates.size();
+            + blueprintUpdates.size()
+            + emergentCharacters.size();
     }
     
     @Override
     public String toString() {
-        return String.format("ExtractionResult[events=%d, factDiscoveries=%d, secrets=%d, tensions=%d, appearances=%d, blueprints=%d]",
+        return String.format("ExtractionResult[events=%d, factDiscoveries=%d, secrets=%d, tensions=%d, appearances=%d, blueprints=%d, emergent=%d]",
             events.size(),factDiscoveries.size(), secretRevelations.size(), 
-            tensionChanges.size(), characterAppearances.size(), blueprintUpdates.size());
+            tensionChanges.size(), characterAppearances.size(), blueprintUpdates.size(), emergentCharacters.size());
     }
     
 }

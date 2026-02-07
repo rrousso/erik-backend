@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import com.github.rrousso.erik_core.dto.extraction.BlueprintUpdate;
 import com.github.rrousso.erik_core.dto.extraction.CharacterAppearance;
+import com.github.rrousso.erik_core.dto.extraction.EmergentCharacterExtraction;
 import com.github.rrousso.erik_core.dto.extraction.EventExtraction;
 import com.github.rrousso.erik_core.dto.extraction.FactDiscovery;
 import com.github.rrousso.erik_core.dto.extraction.SecretRevelation;
@@ -49,6 +50,7 @@ public class ExtractionApplierRegistry {
     private final TensionChangeApplier tensionChangeApplier;
     private final CharacterAppearanceApplier characterAppearanceApplier;
     private final BlueprintUpdateApplier blueprintUpdateApplier;
+    private final EmergentCharacterApplier emergentCharacterApplier;
     
     public ExtractionApplierRegistry(
             EventApplier eventApplier,
@@ -56,15 +58,17 @@ public class ExtractionApplierRegistry {
             SecretRevelationApplier secretRevelationApplier,
             TensionChangeApplier tensionChangeApplier,
             CharacterAppearanceApplier characterAppearanceApplier,
-            BlueprintUpdateApplier blueprintUpdateApplier) {
+            BlueprintUpdateApplier blueprintUpdateApplier,
+            EmergentCharacterApplier emergentCharacterApplier) {
         this.eventApplier = eventApplier;
         this.factDiscoveryApplier = factDiscoveryApplier; 
         this.secretRevelationApplier = secretRevelationApplier;
         this.tensionChangeApplier = tensionChangeApplier;
         this.characterAppearanceApplier = characterAppearanceApplier;
 		this.blueprintUpdateApplier = blueprintUpdateApplier;
+		this.emergentCharacterApplier = emergentCharacterApplier;
         
-        log.info("ExtractionApplierRegistry initialized with {} applier types", 7);
+        log.info("ExtractionApplierRegistry initialized with {} applier types", 8);
     }
     
     /**
@@ -189,5 +193,31 @@ public class ExtractionApplierRegistry {
         }
         
         log.debug("[ExtractionApplierRegistry] Successfully applied {} blueprint updates", updates.size());
+    }
+    
+    /**
+     * Apply a list of emergent character extractions.
+     * 
+     * IMPORTANT: Must be called BEFORE applyCharacterAppearances so that
+     * when the appearance applier processes APPEARED for the same character,
+     * it finds the fully populated entity instead of creating a hollow shell.
+     */
+    public void applyEmergentCharacters(Stanza stanza, List<EmergentCharacterExtraction> emergentCharacters) {
+        if (emergentCharacters == null || emergentCharacters.isEmpty()) {
+            return;
+        }
+        
+        log.info("[ExtractionApplierRegistry] Applying {} emergent characters", emergentCharacters.size());
+        
+        for (EmergentCharacterExtraction emergent : emergentCharacters) {
+            try {
+                emergentCharacterApplier.apply(stanza, emergent);
+            } catch (Exception e) {
+                log.error("[ExtractionApplierRegistry] Failed to apply emergent character '{}': {}", 
+                    emergent.getCharacterName(), e.getMessage(), e);
+            }
+        }
+        
+        log.debug("[ExtractionApplierRegistry] Successfully applied {} emergent characters", emergentCharacters.size());
     }
 }

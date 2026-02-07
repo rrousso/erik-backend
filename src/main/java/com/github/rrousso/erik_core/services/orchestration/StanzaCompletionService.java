@@ -67,6 +67,12 @@ public class StanzaCompletionService {
             // Continue with empty synopsis rather than failing
         }
         
+        // Ensure synopsis is less than 2000 characters
+        if (quickSynopsis.length() > 2000) {
+            log.warn("[StanzaCompletion] Quick synopsis exceeded 2000 characters ({}), truncating", quickSynopsis.length());
+            quickSynopsis = quickSynopsis.substring(0, 2000);
+        }
+        
         CompletedStanza completed = new CompletedStanza(
             quickSynopsis, 
             state.getInitializedStanza()

@@ -276,9 +276,9 @@ public class Fact {
      * Truncates to 255 characters if needed.
      */
     public void setSubjectId(String subjectId) {
-        if (subjectId != null && subjectId.length() > 255) {
-            log.warn("Subject ID exceeded 255 chars, truncating: {}", subjectId.substring(0, 100) + "...");
-            this.subjectId = subjectId.substring(0, 255);
+        if (subjectId != null && subjectId.length() > 100) {
+            log.warn("Subject ID exceeded 100 chars, truncating: {}", subjectId.substring(0, 100) + "...");
+            this.subjectId = subjectId.substring(0, 100);
         } else {
             this.subjectId = subjectId;
         }
@@ -293,9 +293,9 @@ public class Fact {
      * Truncates to 255 characters if needed.
      */
     public void setPredicate(String predicate) {
-        if (predicate != null && predicate.length() > 255) {
-            log.warn("Predicate exceeded 255 chars, truncating: {}", predicate.substring(0, 100) + "...");
-            this.predicate = predicate.substring(0, 255);
+        if (predicate != null && predicate.length() > 100) {
+            log.warn("Predicate exceeded 100 chars, truncating: {}", predicate.substring(0, 100) + "...");
+            this.predicate = predicate.substring(0, 100);
         } else {
             this.predicate = predicate;
         }
