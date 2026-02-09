@@ -1,230 +1,110 @@
-# Erik - AI-Driven Creative Narrative System
+# Erik Core — AI-Driven Narrative Simulation (Archived)
 
-> ⚠️ **UNSTABLE — NOT PRODUCTION-READY**
+> ⚠️ **ARCHIVED — No longer in active development.**
 >
-> Active development. Core features work but may have bugs. Schema, API behavior, and prompts may change without notice.
-> **Development and experimentation only.**
+> This version explored using LLM-driven fact registries and per-character knowledge tracking to enforce information boundaries in interactive fiction — making NPCs act only on what they actually know, enabling dramatic irony, and preventing "knowledge bleeding" between characters.
+>
+> The approach hit a fundamental limitation of current transformer architectures: **attention is not access control.** No matter how carefully character knowledge is modeled in a database and injected into prompts, the LLM attends to all tokens in its context window equally. Characters consistently act on information they shouldn't have access to, especially across scene changes or when new characters are introduced.
+>
+> This is not a prompt engineering problem — it's a property of how transformers process context. The information boundary system works at a data modeling level but cannot be reliably enforced at generation time with current models.
+>
+> **Active development continues in [erik-lite](https://github.com/rrousso/erik-lite)**, a streamlined version that keeps the parts of this system that work well (dual-mode planning/narration, stanza lifecycle, synopsis persistence, beat system) and drops the fact/knowledge tracking in favor of a simpler narrator-driven approach.
 
 ---
 
-## Table of Contents
+## What This Project Contains
 
-- [Overview](#overview)
-- [How It Works](#how-it-works)
-- [System Architecture](#system-architecture)
-- [Stanza Lifecycle](#stanza-lifecycle)
-- [Database Design](#database-design)
-- [Tech Stack](#tech-stack)
-- [Getting Started](#getting-started)
-- [Configuration](#configuration)
-- [Testing](#testing)
-- [Development Status](#development-status)
-- [Known Issues](#known-issues)
+This repo is a complete Java Spring Boot application for interactive storytelling with a dual-LLM architecture. It represents roughly 3 months of development and experimentation. The code is functional and tested — the archive is due to a design-level limitation, not broken code.
 
----
+### What Worked Well
 
-## Overview
+These components are carried forward into erik-lite:
 
-**Erik** is a Java Spring Boot console application for interactive storytelling, powered by a dual-LLM architecture. It enforces strict separation between planning (VOID mode with Erik) and narration (STANZA mode with the Narrator), while tracking persistent narrative state — characters, facts, knowledge boundaries, tensions, and events — in a PostgreSQL database.
+- **Dual Mode System** — VOID mode (planning with Erik) and STANZA mode (narration with the Narrator) with completely separate conversation histories. This prevents personality bleed between the planning companion and the narrator.
+- **Stanza Lifecycle** — Full START → narration → PAUSE → planning → CONTINUE → END/ABANDON cycle with state preservation across transitions.
+- **Beat System** — User-controlled scene boundaries. When a beat ends, events are summarized into prose and minor events are pruned, keeping context manageable over long sessions.
+- **Rolling Synopsis Pipeline** — LLM-generated compression that preserves critical story details across arbitrarily long sessions. Solves the core problem of important character info (pronouns, backstory, established facts) scrolling out of the context window.
+- **OOC Directives** — `((double parentheses))` syntax for invisible instructions to the narrator. Lets the user correct mistakes, adjust pacing, or shift perspective without breaking immersion.
+- **Strategy Pattern Architecture** — SessionFlowService (~50 lines) delegates to isolated strategy classes. Easy to extend and test.
+- **Slash Commands** — Deterministic `/help`, `/list`, `/search`, `/load`, `/clear`, `/debug` bypass LLM processing entirely.
 
-### Core Capabilities
+### What Didn't Work (And Why)
 
-- **Dual Mode System** — VOID mode for story planning with Erik; STANZA mode for live narration with the Narrator. Separate conversation histories prevent personality and knowledge bleed between modes.
-- **Fact-Based Information Boundaries** — A `Fact` + `CharacterKnowledge` system tracks what each character knows, how they learned it, and what they're still unaware of. Facts can be restricted with discovery rules (TOLD, OBSERVED, INFERRED, SENSED_SPECIAL, DOCUMENTED). Characters can only act on information they actually possess.
-- **Beat System** — User-controlled scene boundaries within a stanza. Beats mark transitions in location, time, or perspective. When a beat ends, its events are summarized into prose and minor events are pruned, keeping context manageable over long sessions.
-- **Persistent World State** — PostgreSQL tracks characters, facts, tensions, events, beats, and knowledge states in real-time via mid-stanza extraction after every exchange.
-- **Strategy Pattern Architecture** — SessionFlowService (~50 lines) delegates all logic to isolated strategy classes. StanzaExtractionService (~100 lines) delegates to typed appliers. Easy to extend.
-- **OOC (Out-of-Character) Directives** — Users can issue invisible instructions to the Narrator via `((double parentheses))` syntax for narrative adjustments, system commands, and perspective shifts.
-- **Slash Commands** — Deterministic `/help`, `/list`, `/search`, `/load`, `/clear`, `/debug` commands bypass LLM processing entirely for database operations and inspection.
+These components are being dropped or fundamentally rethought:
 
----
+- **Fact Registry + CharacterKnowledge** — The `Fact` → `CharacterKnowledge` system (with KNOWS / SUSPICIOUS / UNAWARE states and discovery rules like TOLD, OBSERVED, INFERRED) models information boundaries correctly in the database. But when the full fact registry is injected into the narrator prompt, the LLM uses all of it regardless of per-character access rules. Characters answer questions they shouldn't know the answers to, newly introduced NPCs act on information from scenes they weren't in, and partial information sharing (telling a character *some* facts) gets expanded to full knowledge within one exchange.
+- **LLM-Driven Semantic Dedup** — The extraction prompt asks Gemini Flash to check the existing fact registry before creating new facts. This works for exact matches but fails for semantically equivalent statements with different wording. The result is a growing registry of near-duplicates that compounds the context pollution problem.
+- **Event/Fact Distinction** — The extraction system treats too many transient events as persistent facts (emoji reactions, individual chat messages, social actions). This inflates the registry with noise, making the semantic dedup problem worse.
 
-## How It Works
+### The Core Lesson
 
-### Dual-LLM Architecture
+If the narrator needs global knowledge for dramatic irony, and characters need partitioned knowledge for believable behavior, you need either:
 
-Erik routes tasks to two different AI models via OpenRouter:
-
-**Gemini 2.5 Pro** (Narrative) — Powers both Erik and the Narrator for all creative content. Temperature: 0.4. Used for planning discussions, narration, and synopsis generation.
-
-**Gemini 2.5 Flash** (Analytical) — Handles flag detection (START, PAUSE, END, etc.), state extraction from narrative exchanges, synopsis compression, and beat summaries. Temperature: 0.3.
-
-Models are configured in `application.properties` under `erik.narrative.model` and `erik.analytical.model` and can be swapped to any OpenRouter-compatible model.
-
-### Two-Mode System
-
-**VOID Mode** — The user talks to Erik, a creative collaborator who exists outside the simulation. Together they plan the world, characters, tensions, and setup for a stanza. Erik has dedicated directive prompts for each session state (planning, paused, completed, abandoned). Void mode has its own conversation history.
-
-**STANZA Mode** — The Narrator controls the fictional world. The user experiences the story as their character. Every exchange triggers state extraction (via the analytical model) that updates the database. Stanza mode has its own separate conversation history.
-
-Transitions between modes are triggered by natural-language flags detected by the analytical model (e.g., "let's begin" → START_STANZA, "pause" → PAUSE_STANZA).
-
-### The Information Boundary System
-
-Information boundaries are enforced through several layers:
-
-**Fact Registry** — Each stanza maintains a registry of `Fact` entities. Facts can be WORLD (public knowledge), USER_PRIVATE (narrator-only), USER_PUBLIC (observable), or EMERGENT (discovered during narration). Restricted facts have `allowedRevealModes` that constrain how characters can learn them.
-
-**Character Knowledge** — `CharacterKnowledge` records link characters to facts with an awareness state (KNOWS, SUSPICIOUS, or absent = UNAWARE) and a learning method (TOLD, OBSERVED, INFERRED, etc.). The Narrator prompt displays each character's knowledge state using fact hashes so the model knows exactly what each character can act on.
-
-**Separate Histories** — VOID and STANZA conversation histories are completely isolated, preventing Erik's planning personality from bleeding into narration and vice versa.
-
-**User Private Backstory** — Stored on the user's `StanzaCharacter` entity. Visible to the Narrator for dramatic irony but invisible to NPC characters.
-
-### The Extraction System
-
-After each narrative exchange, `StanzaExtractionService` sends the conversation to the analytical model along with current database state. The model returns structured JSON identifying what changed: new events, fact discoveries, knowledge transfers, tension shifts, character appearances, blueprint updates, and emergent characters. Each extraction type has a dedicated `ExtractionApplier` that validates and persists the changes.
-
-Extraction frequency is configurable (`erik.extraction.frequency`) with options to force extraction at stanza start/end and beat boundaries.
-
-### The Beat System
-
-Beats are user-controlled scene divisions within a stanza. Users trigger transitions with `((next beat: transition context))` syntax. The system:
-
-1. Processes any closing narration for the current beat
-2. Forces extraction to capture final state
-3. Generates a prose summary of the completed beat (via `BeatSummaryService`)
-4. Prunes minor events from the completed beat (major events preserved)
-5. Starts a new beat with fresh context
-6. Generates opening narration for the new scene
-7. Clears rolling synopsis for a fresh compression window
-
-Completed beat summaries replace individual events in the Narrator's context window, keeping prompt size manageable across long sessions.
-
-### Synopsis Pipeline
-
-The system maintains narrative continuity through three synopsis types:
-
-**Rolling Synopsis** — Continuously updated compression of the current beat's events and exchanges. Generated from extracted database events (source of truth) plus recent exchanges (for narrative flavor). Updated based on configurable window/threshold sizes.
-
-**Quick Synopsis** — Generated when a stanza ends or is abandoned. Combines completed beat summaries + rolling synopsis + final exchanges into a brief (~200 word) narrative recap. Saved to the stanza's `quick_synopsis` field for `/list` and `/load` display.
-
-**Detailed Synopsis** — A structured factual record of the completed stanza, including character list, chronological events, and current status. Used for stanza continuation and reference.
+1. **Multiple isolated generation calls** (one per character, each seeing only their own knowledge) — works in theory but the latency and cost of N calls per exchange is prohibitive with current APIs.
+2. **Models that support partitioned attention** — don't exist yet.
+3. **Acceptance that the narrator is the narrator**, not a simulation engine — meaning you drop true character cognition and rely on synopsis + user corrections to maintain consistency. This is what erik-lite does.
 
 ---
 
 ## System Architecture
 
-### Request Flow
+### Dual-LLM Architecture
+
+Models are routed via OpenRouter:
+
+- **Gemini 2.5 Pro** (Narrative) — Powers Erik and the Narrator. Temperature: 0.4.
+- **Gemini 2.5 Flash** (Analytical) — Flag detection, state extraction, synopsis compression, beat summaries. Temperature: 0.3.
+
+Configured in `application.properties` under `erik.narrative.model` and `erik.analytical.model`.
+
+### Project Structure
 
 ```
-User Input
-    │
-    ├──→ CommandService (/slash commands — bypasses LLM entirely)
-    │
-    └──→ SessionFlowService (main orchestrator, ~50 lines)
-            │
-            ├──→ FlagDetectorService (Gemini Flash — detects START/PAUSE/END/etc.)
-            │
-            └──→ FlowStrategyFactory
-                    │
-                    ├──→ VoidModeStrategy ──→ ConversationService (Erik)
-                    ├──→ StanzaModeStrategy ──→ ConversationService (Narrator)
-                    │                              └──→ StanzaExtractionService
-                    ├──→ StartStanzaStrategy ──→ StanzaInitializationService
-                    ├──→ PauseStanzaStrategy
-                    ├──→ ContinueStanzaStrategy
-                    ├──→ EndStanzaStrategy ──→ StanzaCompletionService
-                    ├──→ AbandonStanzaStrategy ──→ StanzaCompletionService
-                    └──→ NextBeatStrategy ──→ BeatTransitionService
-```
-
-### Service Layer
-
-```
-services/
-├── orchestration/
-│   ├── SessionFlowService.java              # Main entry point (~50 lines)
-│   ├── ConversationService.java             # Unified LLM conversation handler
-│   ├── StanzaCompletionService.java         # Shared end/abandon logic
-│   └── strategies/
-│       ├── FlowStrategy.java                # Interface
-│       ├── FlowStrategyFactory.java         # Routes flags/modes to strategies
-│       ├── VoidModeStrategy.java
-│       ├── StanzaModeStrategy.java
-│       ├── StartStanzaStrategy.java
-│       ├── PauseStanzaStrategy.java
-│       ├── ContinueStanzaStrategy.java
-│       ├── EndStanzaStrategy.java
-│       ├── AbandonStanzaStrategy.java
-│       └── NextBeatStrategy.java
-├── stanza/
-│   ├── StanzaExtractionService.java         # Extraction orchestrator (~100 lines)
-│   ├── StanzaInitializationService.java     # Phase 1 extraction (stanza setup)
-│   ├── StanzaPersistenceService.java        # Database operations
-│   ├── BeatTransitionService.java           # Beat close/open/summary pipeline
-│   ├── BeatSummaryService.java              # Beat prose summary generation
-│   └── appliers/
-│       ├── ExtractionApplier.java           # Generic interface
-│       ├── ExtractionApplierRegistry.java   # Type-safe registry
-│       ├── EventApplier.java
-│       ├── FactDiscoveryApplier.java
-│       ├── SecretRevelationApplier.java
-│       ├── TensionChangeApplier.java
-│       ├── CharacterAppearanceApplier.java
-│       ├── BlueprintUpdateApplier.java
-│       └── EmergentCharacterApplier.java
-├── llm/
-│   ├── LLMClientService.java               # OpenRouter API client
-│   └── FlagDetectorService.java             # Command detection via Gemini Flash
-├── prompt/
-│   ├── SystemPromptBuilderService.java      # Prompt composition & coordination
-│   ├── PromptLoaderService.java             # Loads prompt templates from resources
-│   └── ExtractionPromptBuilder.java         # Extraction prompt assembly
-├── session/
-│   ├── SessionAssemblerService.java         # Builds SessionContext snapshots
-│   └── SynopsisGeneratorService.java        # Rolling, quick, and detailed synopses
-├── config/
-│   ├── PersonaService.java                  # User persona management + first-time setup
-│   └── SynopsisConfigService.java           # Synopsis configuration
-└── command/
-    └── CommandService.java                  # Slash command handler (/help, /list, etc.)
+src/main/java/com/github/rrousso/erik_core/
+├── services/
+│   ├── session/
+│   │   ├── SessionFlowService.java          # Strategy orchestrator (~50 lines)
+│   │   ├── SessionAssemblerService.java     # Builds SessionContext snapshots
+│   │   └── SynopsisGeneratorService.java    # Rolling, quick, and detailed synopses
+│   ├── stanza/
+│   │   ├── StanzaExtractionService.java     # Mid-stanza extraction coordinator
+│   │   └── appliers/                        # Typed extraction appliers
+│   ├── llm/
+│   │   ├── LLMClientService.java            # OpenRouter API client
+│   │   └── FlagDetectorService.java         # Command detection via Flash
+│   ├── prompt/
+│   │   ├── SystemPromptBuilderService.java  # Prompt composition
+│   │   ├── PromptLoaderService.java         # Template loading from resources
+│   │   └── ExtractionPromptBuilder.java     # Extraction prompt assembly
+│   ├── config/
+│   │   └── PersonaService.java              # User persona management
+│   └── command/
+│       └── CommandService.java              # Slash command handler
+├── persistence/entities/
+│   ├── Persona.java                         # User identity
+│   ├── Stanza.java                          # Narrative session
+│   ├── Beat.java                            # Scene boundary
+│   ├── StanzaCharacter.java                 # Character with presence status
+│   ├── Fact.java                            # Discrete information (with discovery rules)
+│   ├── CharacterKnowledge.java              # What a character knows about a fact
+│   ├── Tension.java                         # Narrative tension threads
+│   └── StanzaEvent.java                     # Event log entries
+└── config/
+    └── ErikProperties.java                  # Spring Boot configuration
 ```
 
 ### Prompt Templates
 
 ```
 src/main/resources/prompts/
-├── user/
-│   └── fictional_frame.txt                  # Safety framing for all modes
-├── erik/
-│   ├── personality.txt                      # Erik's base personality
-│   ├── directive_planning.txt               # VOID mode: planning state
-│   ├── directive_paused.txt                 # VOID mode: stanza paused
-│   ├── directive_completed.txt              # VOID mode: stanza completed
-│   └── directive_abandoned.txt              # VOID mode: stanza abandoned
-├── narrator/
-│   ├── stanza_narrator.txt                  # Narrator personality + rules
-│   └── detailed_synopsis.txt                # End-of-stanza documentation
-├── architect/
-│   └── initialization_prompt.txt            # Stanza setup extraction
-└── analytical/
-    ├── flag_detection.txt                   # Flag detection prompt
-    ├── state_extraction.txt                 # Mid-stanza extraction prompt
-    ├── rolling_synopsis.txt                 # Rolling synopsis generation
-    ├── quick_synopsis.txt                   # Quick synopsis generation
-    └── beat_summary.txt                     # Beat summary generation
+├── user/fictional_frame.txt                 # Safety framing
+├── erik/                                    # Erik personality + state directives
+├── narrator/stanza_narrator.txt             # Narrator personality + rules
+├── architect/initialization_prompt.txt      # Stanza setup extraction
+└── analytical/                              # Flash prompts (extraction, synopsis, flags)
 ```
 
-### Domain Model
-
-```
-persistence/entities/
-├── Persona.java                 # User identity (name, pronouns, description)
-├── Stanza.java                  # Narrative session (setting, premise, tone, world state)
-├── Beat.java                    # Scene boundary within a stanza
-├── StanzaCharacter.java         # Character in a stanza (with presence status)
-├── Fact.java                    # Discrete information (with discovery rules)
-├── CharacterKnowledge.java      # What a character knows about a fact
-├── Secret.java                  # Named secrets
-├── CharacterSecretState.java    # Character awareness of secrets
-├── Tension.java                 # Narrative tension threads
-└── StanzaEvent.java             # Event log entries
-```
-
----
-
-## Stanza Lifecycle
+### Stanza Lifecycle
 
 ```
 VOID MODE                          STANZA MODE
@@ -251,168 +131,40 @@ VOID MODE                          STANZA MODE
           (Quick synopsis, no reflect)
 ```
 
----
+### Database
 
-## Database Design
-
-PostgreSQL with Flyway migrations (`src/main/resources/db/migration/`). Hibernate validates the schema at startup (`ddl-auto=validate`).
+PostgreSQL with Flyway migrations (`src/main/resources/db/migration/`). Hibernate validates at startup.
 
 Core tables: `personas`, `stanzas`, `beats`, `stanza_characters`, `stanza_facts`, `character_knowledge`, `secrets`, `character_secret_state`, `stanza_tensions`, `stanza_events`.
-
-Key relationships:
-- A `Stanza` belongs to a `Persona` and contains `Beat`s, `StanzaCharacter`s, `Fact`s, `Tension`s, and `StanzaEvent`s
-- `CharacterKnowledge` links a `StanzaCharacter` to a `Fact` with awareness state and learning method
-- `StanzaEvent`s belong to a `Beat` and track exchange number, involved characters, and major/minor classification
-- `Fact`s can be restricted with `allowedRevealModes` (comma-separated: TOLD, OBSERVED, INFERRED, SENSED_SPECIAL, DOCUMENTED)
 
 ---
 
 ## Tech Stack
 
-- **Java 17** + **Spring Boot 3.2**
-- **PostgreSQL** (primary datastore)
-- **Flyway** (schema migrations)
-- **Spring Data JPA / Hibernate** (ORM)
-- **OpenRouter API** (LLM gateway — currently Gemini 2.5 Pro + Flash)
-- **Jackson** (JSON parsing for extraction results)
-- **Maven** (build)
-- **JUnit 5 + Mockito** (testing)
+- Java 17 + Spring Boot 3.2
+- PostgreSQL + Flyway + Spring Data JPA / Hibernate
+- OpenRouter API (Gemini 2.5 Pro + Flash)
+- Jackson, Maven, JUnit 5 + Mockito
 
 ---
 
-## Getting Started
+## Running (For Reference)
 
-### Prerequisites
-
-- Java 17+
-- Maven 3.6+
-- PostgreSQL 14+
-- An [OpenRouter](https://openrouter.ai/) API key
-
-### Setup
-
-**1. Clone the repository**
 ```bash
-git clone https://github.com/yourusername/erik-core.git
-cd erik-core
-```
+# Prerequisites: Java 17+, Maven 3.6+, PostgreSQL 14+, OpenRouter API key
 
-**2. Create PostgreSQL database**
-```bash
 createdb erik_db
-```
 
-**3. Set environment variables**
-```bash
 export DB_USER=your_postgres_username
 export DB_PASS=your_postgres_password
 export OPENROUTER_API_KEY=your_openrouter_key
-```
 
-**4. Build and run**
-```bash
 mvn clean install
 mvn spring-boot:run
 ```
 
-On first run, Flyway applies the baseline migration and PersonaService runs a first-time setup wizard in the console to create your persona.
-
 ---
 
-## Configuration
-
-All configuration is in `src/main/resources/application.properties`:
-
-| Property | Default | Purpose |
-|----------|---------|---------|
-| `erik.narrative.model` | `google/gemini-2.5-pro` | Model for Erik + Narrator |
-| `erik.narrative.temperature` | `0.4` | Creativity level for narrative |
-| `erik.analytical.model` | `google/gemini-2.5-flash` | Model for extraction + flags |
-| `erik.analytical.temperature` | `0.3` | Precision for analysis |
-| `erik.round-window-size` | `6` | Recent exchanges kept in context |
-| `erik.round-threshold-size` | `18` | Exchanges before synopsis triggers |
-| `erik.extraction.frequency` | `1` | Extract every N exchanges |
-| `erik.extraction.enabled` | `true` | Toggle extraction |
-| `erik.events.compress-frequency` | `20` | Event compression interval |
-| `erik.debug.enabled` | `true` | Debug file output |
-
----
-
-## Testing
-
-### Current Coverage
-
-Tests exist for:
-- `SessionFlowService` — routing logic (flag → strategy, mode → strategy)
-- `FlagDetectorService` — flag detection edge cases
-- `SessionAssemblerService` — context assembly for VOID and STANZA modes
-- `CommandService` — slash command parsing and execution
-
-### Test Stanzas
-
-**Cinderella Stanza** — Basic lifecycle: START → narration → END. Validates flow, character tracking, event logging.
-
-**Teen Wolf Stanza** — Multi-character knowledge tracking. Validates information boundaries and fact discovery.
-
-**Beach Stanza** — Full lifecycle: START → narration → PAUSE → planning → CONTINUE → END. Validates state preservation across pause/resume.
-
-Run tests:
-```bash
-mvn test
-```
-
----
-
-## Development Status
-
-### Completed ✅
-
-- Dual-mode system (VOID / STANZA) with complete separation
-- Strategy pattern architecture (SessionFlowService, ExtractionAppliers)
-- Full stanza lifecycle (START, PAUSE, CONTINUE, END, ABANDON)
-- Fact-based information boundary system with discovery rules
-- Character knowledge tracking (KNOWS / SUSPICIOUS / UNAWARE)
-- Beat system with summary generation and event pruning
-- OOC directive handling in narrator prompt
-- Rolling + quick + detailed synopsis pipeline
-- Mid-stanza extraction with typed appliers (events, facts, knowledge, tensions, characters, blueprints, emergent characters)
-- Slash commands (/help, /list, /search, /load, /clear, /debug)
-- Persona management with first-time setup
-- Flyway database migrations
-- PostgreSQL full-text search for stanza lookup
-- Debug file output (prompts, synopses, extraction results)
-
-### In Progress 🔄
-
-- Dynamic character availability (tension-driven scene selection)
-- Comprehensive test coverage across all services
-- Stanza continuation from database (loading a previous stanza to resume narrating)
-
-### Planned 📋
-
-- Web interface (currently console only)
-- User authentication and multi-user support
-- Caching for frequent database queries
-- Cost tracking and token usage reporting
-- Integration tests for full lifecycle scenarios
-
----
-
-## Known Issues
-
-1. **Limited test coverage** — Only a few services have comprehensive unit tests. Risk of regressions.
-2. **No transaction rollback on extraction failure** — If a database write fails mid-extraction, state may be partially applied.
-3. **Console-only interface** — No web UI yet; `spring.main.web-application-type=none` is set.
-4. **Single-user system** — PersonaService loads the first persona from the database. No multi-user support.
-5. **Synopsis can drift** — Rolling synopsis is LLM-generated compression and may occasionally drop or distort details over very long sessions.
-
----
-
-## Contributing
-
-This project is in early development and not currently accepting contributions. Contribution guidelines will be added once core functionality is stable.
-
----
-
-**Last Updated:** February 7, 2026
+**Archived:** February 2026
 **Version:** 0.0.1-SNAPSHOT
+**Author:** rrousso
